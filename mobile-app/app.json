@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Payy ZK Rollup",
+    "slug": "psichedelic",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.payy.zkrollup",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.payy.zkrollup"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "efa0d1f8-c2ec-42e3-9e00-b14fa5b3ee3b"
+      }
+    },
+    "owner": "psichedelic-labs",
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}

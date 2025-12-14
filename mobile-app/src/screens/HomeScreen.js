@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar } from 'react-native';
+import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import BalanceCard from '../components/BalanceCard';
@@ -10,12 +10,72 @@ import payyApi from '../api/payyApi';
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { balance: walletBalance, hasWallet, refreshBalance } = useWallet();
+  const { wallet, balance: walletBalance, hasWallet, refreshBalance, addNote } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
+  const [faucetLoading, setFaucetLoading] = useState(false);
   const [stats, setStats] = useState(null);
   const [height, setHeight] = useState(null);
   const [health, setHealth] = useState(null);
   const [transactions, setTransactions] = useState([]);
+
+  const handleFaucet = async () => {
+    if (!hasWallet) {
+      Alert.alert('No Wallet', 'Please create or import a wallet first', [
+        { text: 'OK', onPress: () => navigation.navigate('ProfileTab') }
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      'Request Test Tokens',
+      'This will mint $100 test USDC to your wallet. This may take up to a minute.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Request', 
+          onPress: async () => {
+            setFaucetLoading(true);
+            try {
+              // First derive the ZK address from the private key
+              const addressData = await payyApi.deriveAddress(wallet.privateKey);
+              const zkAddress = addressData.address;
+              
+              // Request faucet tokens
+              const result = await payyApi.requestFaucet(zkAddress, 100_000_000); // $100
+              
+              // Save the note to local storage for balance tracking
+              if (result.note) {
+                await addNote({
+                  address: result.note.address,
+                  psi: result.note.psi,
+                  value: result.amount, // Use the raw amount (100000000)
+                  commitment: result.note.commitment,
+                  token: 'USDC',
+                  source: zkAddress,
+                });
+              }
+              
+              Alert.alert(
+                'Tokens Received! 🎉',
+                `$100 test USDC has been minted to your wallet.\n\nNote commitment: ${result.note?.commitment?.slice(0, 16)}...`,
+              );
+              
+              // Refresh data
+              fetchData();
+            } catch (err) {
+              console.error('Faucet error:', err);
+              Alert.alert(
+                'Faucet Error',
+                err.response?.data?.error?.message || err.message || 'Failed to request tokens'
+              );
+            } finally {
+              setFaucetLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const fetchData = async () => {
     try {
@@ -121,9 +181,10 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('SubmitTransaction')}
           />
           <ActionButton 
-            icon="⋯" 
-            label="More" 
-            onPress={() => {}}
+            icon={faucetLoading ? "⏳" : "💧"} 
+            label="Faucet" 
+            onPress={handleFaucet}
+            disabled={faucetLoading}
           />
         </View>
 

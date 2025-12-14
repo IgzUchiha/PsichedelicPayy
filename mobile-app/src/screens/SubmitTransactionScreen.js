@@ -1,49 +1,238 @@
-import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, Text, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState } from 'react';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import payyApi from '../api/payyApi';
+import { useWallet } from '../context/WalletContext';
 
 export default function SubmitTransactionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { wallet, getUnspentNotes, addNote, spendNote } = useWallet();
   const [loading, setLoading] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
   const [note, setNote] = useState('');
 
+  // Convert dollar amount to micro units (6 decimals)
+  const dollarToMicro = (dollars) => {
+    return Math.floor(parseFloat(dollars) * 1_000_000);
+  };
+
+  // Convert micro units to hex (32 bytes)
+  const microToHex = (micro) => {
+    const hex = micro.toString(16).padStart(64, '0');
+    return '0x' + hex;
+  };
+
+  // Select notes to spend for a given amount
+  const selectNotesForAmount = (targetAmount) => {
+    const unspent = getUnspentNotes();
+    let selected = [];
+    let total = 0;
+
+    // Sort by value descending to minimize number of inputs
+    const sorted = [...unspent].sort((a, b) => {
+      const aVal = typeof a.value === 'number' ? a.value : parseInt(a.value, 16) || 0;
+      const bVal = typeof b.value === 'number' ? b.value : parseInt(b.value, 16) || 0;
+      return bVal - aVal;
+    });
+
+    for (const n of sorted) {
+      if (total >= targetAmount) break;
+      const val = typeof n.value === 'number' ? n.value : parseInt(n.value, 16) || 0;
+      selected.push(n);
+      total += val;
+    }
+
+    return { selected, total };
+  };
+
   const handleSubmit = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
+    const amountMicro = dollarToMicro(amount);
+
+    if (!amount || amountMicro <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount');
+      return;
+    }
+
+    if (!recipient.trim()) {
+      Alert.alert('Missing Recipient', 'Please enter a recipient address');
+      return;
+    }
+
+    if (!wallet?.privateKey) {
+      Alert.alert('No Wallet', 'Please import or create a wallet first');
+      return;
+    }
+
+    // Check if we have enough balance
+    const { selected: inputNotes, total: inputTotal } = selectNotesForAmount(amountMicro);
+
+    if (inputTotal < amountMicro) {
+      Alert.alert(
+        'Insufficient Balance',
+        `You need $${(amountMicro / 1_000_000).toFixed(2)} but only have $${(inputTotal / 1_000_000).toFixed(2)} available.`
+      );
+      return;
+    }
+
+    if (inputNotes.length === 0) {
+      Alert.alert('No Notes', 'You don\'t have any spendable notes. Use the Faucet to get test tokens.');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await payyApi.submitTransaction({
-        snark: {
-          V1: {
-            instances: [],
-            proof: Buffer.from('demo_proof_data').toString('base64'),
-          }
-        }
+      // Step 1: Get merkle paths for input notes
+      setLoadingStatus('Fetching merkle paths...');
+      const commitments = inputNotes.map((n) => n.commitment);
+      const merkleData = await payyApi.getMerklePathsForNotes(commitments);
+
+      // Check all notes were found
+      const notFound = merkleData.paths.filter((p) => !p.found);
+      if (notFound.length > 0) {
+        throw new Error(
+          `Some notes not found in merkle tree. They may not be confirmed yet. Try again in a few seconds.`
+        );
+      }
+
+      // Step 2: Derive addresses
+      setLoadingStatus('Preparing transaction...');
+      const myAddressData = await payyApi.deriveAddress(wallet.privateKey);
+      const myAddress = myAddressData.address;
+
+      // Normalize recipient ZK address
+      let recipientAddress = recipient.trim();
+      if (!recipientAddress.startsWith('0x')) {
+        recipientAddress = '0x' + recipientAddress;
+      }
+      // Pad to 66 chars (0x + 64 hex chars) if needed
+      if (recipientAddress.length < 66) {
+        recipientAddress = '0x' + recipientAddress.slice(2).padStart(64, '0');
+      }
+
+      // Step 3: Generate psi values for output notes
+      const psi1 = await payyApi.generatePsi();
+      const psi2 = await payyApi.generatePsi();
+
+      // Step 4: Build input notes with merkle paths
+      const inputs = inputNotes.slice(0, 2).map((n, i) => {
+        const pathInfo = merkleData.paths.find((p) => p.commitment === n.commitment);
+        return {
+          address: n.address,
+          psi: n.psi,
+          value: typeof n.value === 'number' ? microToHex(n.value) : n.value,
+          token: n.token || 'USDC',
+          source: n.source || myAddress,
+          merkle_path: pathInfo?.path || [],
+        };
       });
+
+      // Step 5: Build output notes
+      const changeAmount = inputTotal - amountMicro;
+
+      const outputs = [
+        {
+          address: recipientAddress,
+          psi: psi1.psi,
+          value: microToHex(amountMicro),
+          token: 'USDC',
+          source: myAddress,
+        },
+        {
+          address: myAddress,
+          psi: psi2.psi,
+          value: microToHex(changeAmount),
+          token: 'USDC',
+          source: myAddress,
+        },
+      ];
+
+      // Step 6: Build proof request
+      const proofRequest = {
+        secret_key: wallet.privateKey,
+        merkle_root: merkleData.root,
+        inputs,
+        outputs,
+        kind: 'transfer',
+      };
+
+      // Step 7: Generate ZK proof
+      setLoadingStatus('Generating ZK proof (this may take a minute)...');
+      const proofResult = await payyApi.generateTransferProof(proofRequest);
+
+      // Step 8: Submit transaction
+      setLoadingStatus('Submitting transaction...');
+      const response = await payyApi.submitTransaction({
+        snark: proofResult.snark,
+      });
+
+      // Step 9: Update local state - mark input notes as spent
+      for (const n of inputNotes.slice(0, 2)) {
+        await spendNote(n.commitment);
+      }
+
+      // Step 10: Add change note to wallet (if any)
+      if (changeAmount > 0) {
+        // Calculate commitment for change note
+        const changeCommitment = await payyApi.calculateCommitment({
+          address: myAddress,
+          psi: psi2.psi,
+          value: microToHex(changeAmount),
+          token: 'USDC',
+          source: myAddress,
+        });
+
+        await addNote({
+          address: myAddress,
+          psi: psi2.psi,
+          value: changeAmount,
+          commitment: changeCommitment.commitment,
+          token: 'USDC',
+          source: myAddress,
+        });
+      }
 
       Alert.alert(
         'Payment Sent! 🎉',
-        `Your payment of $${amount} has been submitted.`,
-        [
-          { text: 'Done', onPress: () => navigation.goBack() },
-        ]
+        `$${amount} has been sent.\n\nBlock: ${response.height}\nTx: ${response.txn_hash?.slice(0, 16)}...`,
+        [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
-      Alert.alert('Demo Mode', 'Real transactions require ZK proof generation. This is a UI demo.');
+      console.error('Transaction error:', err);
+
+      let errorMessage = 'Transaction failed. Please try again.';
+
+      if (err.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to the Payy node. Make sure the backend is running.';
+      } else if (err.response?.data?.error) {
+        const errData = err.response.data.error;
+        errorMessage = errData.message || errData.reason || JSON.stringify(errData);
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      Alert.alert('Transaction Failed', errorMessage);
     } finally {
       setLoading(false);
+      setLoadingStatus('');
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
@@ -68,6 +257,7 @@ export default function SubmitTransactionScreen({ navigation }) {
             placeholderTextColor={colors.textMuted}
             keyboardType="decimal-pad"
             autoFocus
+            editable={!loading}
           />
         </View>
 
@@ -78,9 +268,10 @@ export default function SubmitTransactionScreen({ navigation }) {
             style={styles.textInput}
             value={recipient}
             onChangeText={setRecipient}
-            placeholder="Enter address or username"
+            placeholder="Enter recipient ZK address (0x...)"
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
+            editable={!loading}
           />
         </View>
 
@@ -93,6 +284,7 @@ export default function SubmitTransactionScreen({ navigation }) {
             onChangeText={setNote}
             placeholder="What's this for?"
             placeholderTextColor={colors.textMuted}
+            editable={!loading}
           />
         </View>
 
@@ -102,12 +294,21 @@ export default function SubmitTransactionScreen({ navigation }) {
             <TouchableOpacity
               key={quickAmount}
               style={styles.quickAmountButton}
-              onPress={() => setAmount(quickAmount)}
+              onPress={() => !loading && setAmount(quickAmount)}
+              disabled={loading}
             >
               <Text style={styles.quickAmountText}>${quickAmount}</Text>
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Loading Status */}
+        {loading && loadingStatus && (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="small" color={colors.green} />
+            <Text style={styles.loadingText}>{loadingStatus}</Text>
+          </View>
+        )}
 
         {/* Info Card */}
         <View style={styles.infoCard}>
@@ -115,7 +316,8 @@ export default function SubmitTransactionScreen({ navigation }) {
           <View style={styles.infoContent}>
             <Text style={styles.infoTitle}>Zero-Knowledge Privacy</Text>
             <Text style={styles.infoText}>
-              Your transaction is protected by ZK proofs. Only you and the recipient know the details.
+              Your transaction is protected by ZK proofs. Only you and the recipient know the
+              details.
             </Text>
           </View>
         </View>
@@ -124,20 +326,24 @@ export default function SubmitTransactionScreen({ navigation }) {
       {/* Submit Button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.submitButton, (!amount || loading) && styles.submitButtonDisabled]}
+          style={[
+            styles.submitButton,
+            (!amount || !recipient || loading) && styles.submitButtonDisabled,
+          ]}
           onPress={handleSubmit}
-          disabled={!amount || loading}
+          disabled={!amount || !recipient || loading}
           activeOpacity={0.8}
         >
-          <Text style={styles.submitButtonText}>
-            {loading ? 'Sending...' : `Pay${amount ? ` $${amount}` : ''}`}
-          </Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : (
+            <Text style={styles.submitButtonText}>Pay{amount ? ` $${amount}` : ''}</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -226,6 +432,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
   },
+  loadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.cardBackground,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
   infoCard: {
     flexDirection: 'row',
     backgroundColor: colors.cardBackground,
@@ -261,6 +482,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
   },
   submitButtonDisabled: {
     backgroundColor: colors.surfaceLight,

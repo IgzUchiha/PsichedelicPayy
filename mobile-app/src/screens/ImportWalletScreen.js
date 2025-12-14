@@ -16,11 +16,27 @@ import { useWallet } from '../context/WalletContext';
 
 export default function ImportWalletScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { importWallet } = useWallet();
+  const { importWallet, createWallet } = useWallet();
   const [privateKey, setPrivateKey] = useState('');
   const [walletName, setWalletName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showKey, setShowKey] = useState(false);
+
+  const handleCreateNew = async () => {
+    setLoading(true);
+    const result = await createWallet(walletName || 'My Wallet');
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert(
+        'Wallet Created! 🎉',
+        `Your new wallet has been created.\n\nAddress:\n${result.address}\n\n⚠️ Save your recovery phrase:\n${result.mnemonic}`,
+        [{ text: 'Done', onPress: () => navigation.goBack() }]
+      );
+    } else {
+      Alert.alert('Creation Failed', result.error || 'Could not create wallet.');
+    }
+  };
 
   const handleImport = async () => {
     if (!privateKey.trim()) {
@@ -118,6 +134,27 @@ export default function ImportWalletScreen({ navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* Divider */}
+        <View style={styles.dividerContainer}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Create New Wallet */}
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={handleCreateNew}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.createIcon}>✨</Text>
+          <View style={styles.createContent}>
+            <Text style={styles.createTitle}>Create New Wallet</Text>
+            <Text style={styles.createSubtitle}>Generate a fresh wallet with a new address</Text>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Import Button */}
@@ -285,5 +322,45 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: colors.background,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.surfaceLight,
+  },
+  dividerText: {
+    fontSize: 14,
+    color: colors.textMuted,
+    marginHorizontal: 16,
+  },
+  createButton: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardBackground,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  createIcon: {
+    fontSize: 32,
+    marginRight: 16,
+  },
+  createContent: {
+    flex: 1,
+  },
+  createTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  createSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });

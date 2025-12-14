@@ -1,16 +1,37 @@
-import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Share } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Text, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { useWallet } from '../context/WalletContext';
+import payyApi from '../api/payyApi';
 
 export default function ReceiveScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { wallet, hasWallet } = useWallet();
+  const [zkAddress, setZkAddress] = useState(null);
+  const [loading, setLoading] = useState(true);
   
-  // Use real wallet address if available, otherwise demo
-  const walletAddress = wallet?.address || '0x8f3a4b2c9d1e5f6a7b8c9d0e1f2a3b4c5d6e7f8a';
-  const shortAddress = `${walletAddress.slice(0, 10)}...${walletAddress.slice(-8)}`;
+  // Derive ZK address from private key
+  useEffect(() => {
+    const deriveZkAddress = async () => {
+      if (wallet?.privateKey) {
+        try {
+          const result = await payyApi.deriveAddress(wallet.privateKey);
+          setZkAddress(result.address);
+        } catch (err) {
+          console.error('Error deriving ZK address:', err);
+        }
+      }
+      setLoading(false);
+    };
+    deriveZkAddress();
+  }, [wallet?.privateKey]);
+  
+  // Use ZK address for receiving payments
+  const walletAddress = zkAddress || wallet?.address || '0x...';
+  const shortAddress = walletAddress.length > 20 
+    ? `${walletAddress.slice(0, 10)}...${walletAddress.slice(-8)}`
+    : walletAddress;
 
   const handleShare = async () => {
     try {
@@ -49,8 +70,12 @@ export default function ReceiveScreen({ navigation }) {
 
         {/* Address */}
         <View style={styles.addressCard}>
-          <Text style={styles.addressLabel}>Your Payy Address</Text>
-          <Text style={styles.address}>{shortAddress}</Text>
+          <Text style={styles.addressLabel}>Your ZK Address</Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.green} />
+          ) : (
+            <Text style={styles.address}>{shortAddress}</Text>
+          )}
         </View>
 
         {/* Actions */}
@@ -70,9 +95,19 @@ export default function ReceiveScreen({ navigation }) {
         <View style={styles.infoCard}>
           <Text style={styles.infoIcon}>🔒</Text>
           <Text style={styles.infoText}>
-            Share this address to receive payments. Your transaction details remain private with ZK proofs.
+            This is your ZK address (derived from your private key). Share it to receive payments. Your transaction details remain private with ZK proofs.
           </Text>
         </View>
+        
+        {/* Private Key Info */}
+        {wallet?.privateKey && (
+          <View style={[styles.infoCard, { marginTop: 12 }]}>
+            <Text style={styles.infoIcon}>🔑</Text>
+            <Text style={styles.infoText}>
+              To send to someone, you need their ZK address or private key. They can find their ZK address on this screen.
+            </Text>
+          </View>
+        )}
       </View>
     </View>
   );

@@ -1,0 +1,9 @@
+[package]
+name = "wasm-prover"
+version = "0.1.0"
+edition = "2021"
+
+# This package is not currently used - keeping as placeholder
+# WASM compilation of ZK circuits has dependency issues
+
+[dependencies]

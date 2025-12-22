@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import { TouchableOpacity, Text, View, StyleSheet, Animated } from 'react-native';
-import colors from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ActionButton({ icon, label, onPress, primary = false }) {
+  const { theme } = useTheme();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -34,15 +35,16 @@ export default function ActionButton({ icon, label, onPress, primary = false }) 
       <Animated.View 
         style={[
           styles.iconContainer, 
-          primary && styles.iconContainerPrimary,
+          { backgroundColor: theme.surfaceLight, borderColor: theme.border },
+          primary && { backgroundColor: theme.accent, borderWidth: 0 },
           { transform: [{ scale: scaleAnim }] },
-          primary ? styles.primaryShadow : styles.defaultShadow,
+          primary ? { shadowColor: theme.accent } : styles.defaultShadow,
         ]}
       >
-        {primary && <View style={styles.glowEffect} />}
-        <Text style={[styles.icon, primary && styles.iconPrimary]}>{icon}</Text>
+        {primary && <View style={[styles.glowEffect, { backgroundColor: theme.accentLight }]} />}
+        <Text style={[styles.icon, { color: theme.textPrimary }, primary && { color: theme.background }]}>{icon}</Text>
       </Animated.View>
-      <Text style={[styles.label, primary && styles.labelPrimary]}>{label}</Text>
+      <Text style={[styles.label, { color: theme.textSecondary }, primary && { color: theme.accent }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -56,31 +58,19 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.surfaceLight,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
-  },
-  iconContainerPrimary: {
-    backgroundColor: colors.green,
-    borderWidth: 0,
-  },
-  defaultShadow: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 8,
   },
-  primaryShadow: {
-    shadowColor: colors.green,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 12,
+  defaultShadow: {
+    shadowColor: '#000',
   },
   glowEffect: {
     position: 'absolute',
@@ -88,24 +78,14 @@ const styles = StyleSheet.create({
     left: -10,
     right: -10,
     bottom: -10,
-    backgroundColor: colors.greenLight,
     opacity: 0.15,
     borderRadius: 40,
   },
   icon: {
     fontSize: 26,
-    color: colors.textPrimary,
-  },
-  iconPrimary: {
-    color: colors.background,
-    fontWeight: '700',
   },
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  labelPrimary: {
-    color: colors.green,
   },
 });

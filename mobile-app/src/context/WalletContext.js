@@ -113,9 +113,39 @@ export function WalletProvider({ children }) {
     }
   };
 
-  // Get unspent notes
+  // Get unspent notes (excludes spent AND pending)
   const getUnspentNotes = () => {
-    return notes.filter(n => !n.spent);
+    return notes.filter(n => !n.spent && !n.pending);
+  };
+
+  // Mark notes as pending (being used in a transaction)
+  const markNotesPending = async (commitments) => {
+    try {
+      const updatedNotes = notes.map(note =>
+        commitments.includes(note.commitment) ? { ...note, pending: true } : note
+      );
+      setNotes(updatedNotes);
+      await SecureStore.setItemAsync(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes));
+      return { success: true };
+    } catch (error) {
+      console.error('Error marking notes pending:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Unmark notes as pending (if transaction fails)
+  const unmarkNotesPending = async (commitments) => {
+    try {
+      const updatedNotes = notes.map(note =>
+        commitments.includes(note.commitment) ? { ...note, pending: false } : note
+      );
+      setNotes(updatedNotes);
+      await SecureStore.setItemAsync(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes));
+      return { success: true };
+    } catch (error) {
+      console.error('Error unmarking notes pending:', error);
+      return { success: false, error: error.message };
+    }
   };
 
   // Clear all notes (for debugging/reset)
@@ -222,6 +252,8 @@ export function WalletProvider({ children }) {
         spendNote,
         getUnspentNotes,
         clearNotes,
+        markNotesPending,
+        unmarkNotesPending,
         hasWallet: !!wallet,
       }}
     >

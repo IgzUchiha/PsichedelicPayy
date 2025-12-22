@@ -18,7 +18,7 @@ import { useWallet } from '../context/WalletContext';
 
 export default function SubmitTransactionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { wallet, getUnspentNotes, addNote, spendNote } = useWallet();
+  const { wallet, getUnspentNotes, addNote, spendNote, markNotesPending, unmarkNotesPending } = useWallet();
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [amount, setAmount] = useState('');
@@ -94,7 +94,12 @@ export default function SubmitTransactionScreen({ navigation }) {
     }
 
     setLoading(true);
+    const pendingCommitments = inputNotes.slice(0, 2).map(n => n.commitment);
+    
     try {
+      // Mark notes as pending immediately to prevent double-spend
+      await markNotesPending(pendingCommitments);
+      
       // Step 1: Get merkle paths for input notes
       setLoadingStatus('Fetching merkle paths...');
       const commitments = inputNotes.map((n) => n.commitment);
@@ -225,6 +230,9 @@ export default function SubmitTransactionScreen({ navigation }) {
       }
 
       Alert.alert('Transaction Failed', errorMessage);
+      
+      // Unmark notes as pending so they can be used again
+      await unmarkNotesPending(pendingCommitments);
     } finally {
       setLoading(false);
       setLoadingStatus('');

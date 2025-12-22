@@ -1,13 +1,14 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import colors from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 
 export default function NetworkBalanceItem({ network, onPress }) {
+  const { theme } = useTheme();
   const hasBalance = network.balance > 0;
 
   return (
     <TouchableOpacity
-      style={styles.container}
+      style={[styles.container, { borderBottomColor: theme.divider }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
@@ -16,12 +17,12 @@ export default function NetworkBalanceItem({ network, onPress }) {
       </View>
       
       <View style={styles.info}>
-        <Text style={styles.name}>{network.name}</Text>
-        <Text style={styles.chainId}>Chain ID: {network.chainId}</Text>
+        <Text style={[styles.name, { color: theme.textPrimary }]}>{network.name}</Text>
+        <Text style={[styles.chainId, { color: theme.textSecondary }]}>Chain ID: {network.chainId}</Text>
       </View>
       
       <View style={styles.balanceContainer}>
-        <Text style={[styles.balance, hasBalance && styles.balanceActive]}>
+        <Text style={[styles.balance, { color: theme.textSecondary }, hasBalance && { color: theme.accent }]}>
           {network.formattedBalance} {network.symbol}
         </Text>
       </View>
@@ -36,7 +37,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
   },
   iconContainer: {
     width: 40,
@@ -55,12 +55,10 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textPrimary,
     marginBottom: 2,
   },
   chainId: {
     fontSize: 13,
-    color: colors.textSecondary,
   },
   balanceContainer: {
     alignItems: 'flex-end',
@@ -68,9 +66,5 @@ const styles = StyleSheet.create({
   balance: {
     fontSize: 15,
     fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  balanceActive: {
-    color: colors.green,
   },
 });

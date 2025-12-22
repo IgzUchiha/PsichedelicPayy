@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar, Alert, ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import colors from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import BalanceCard from '../components/BalanceCard';
 import ActionButton from '../components/ActionButton';
 import TransactionItem from '../components/TransactionItem';
@@ -10,6 +10,7 @@ import payyApi from '../api/payyApi';
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { theme, isDarkMode } = useTheme();
   const { wallet, balance: walletBalance, hasWallet, refreshBalance, addNote } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
   const [faucetLoading, setFaucetLoading] = useState(false);
@@ -36,19 +37,15 @@ export default function HomeScreen({ navigation }) {
           onPress: async () => {
             setFaucetLoading(true);
             try {
-              // First derive the ZK address from the private key
               const addressData = await payyApi.deriveAddress(wallet.privateKey);
               const zkAddress = addressData.address;
+              const result = await payyApi.requestFaucet(zkAddress, 100_000_000);
               
-              // Request faucet tokens
-              const result = await payyApi.requestFaucet(zkAddress, 100_000_000); // $100
-              
-              // Save the note to local storage for balance tracking
               if (result.note) {
                 await addNote({
                   address: result.note.address,
                   psi: result.note.psi,
-                  value: result.amount, // Use the raw amount (100000000)
+                  value: result.amount,
                   commitment: result.note.commitment,
                   token: 'USDC',
                   source: zkAddress,
@@ -59,8 +56,6 @@ export default function HomeScreen({ navigation }) {
                 'Tokens Received! 🎉',
                 `$100 test USDC has been minted to your wallet.\n\nNote commitment: ${result.note?.commitment?.slice(0, 16)}...`,
               );
-              
-              // Refresh data
               fetchData();
             } catch (err) {
               console.error('Faucet error:', err);
@@ -93,19 +88,16 @@ export default function HomeScreen({ navigation }) {
       setHeight(heightData);
       setStats(statsData);
       
-      // Handle transaction response
       if (Array.isArray(txData)) {
         setTransactions(txData);
       } else if (txData?.transactions) {
         setTransactions(txData.transactions);
       }
       
-      // Refresh wallet balance
       if (hasWallet) {
         await refreshBalance();
       }
     } catch (err) {
-      // Silently handle errors
     } finally {
       setRefreshing(false);
     }
@@ -122,24 +114,22 @@ export default function HomeScreen({ navigation }) {
 
   const totalTxns = stats?.last_7_days_txns?.reduce((sum, day) => sum + day.count, 0) || 0;
   const isHealthy = !health?.error;
-
-  // Only show real balance
   const displayBalance = walletBalance?.total || '0.00';
   const change = walletBalance?.change || 0;
   const changePercent = walletBalance?.changePercent || 0;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       
-      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.profileIcon}>
-          <Text style={styles.profileText}>P</Text>
-        </View>
-        <Text style={styles.headerTitle}>Payy</Text>
+        <Image 
+          source={require('../../assets/IMG_3244.jpg')} 
+          style={styles.profileIcon}
+        />
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>PSI</Text>
         <View style={styles.statusDot}>
-          <View style={[styles.dot, isHealthy ? styles.dotOnline : styles.dotOffline]} />
+          <View style={[styles.dot, isHealthy ? { backgroundColor: theme.accent } : { backgroundColor: theme.red }]} />
         </View>
       </View>
 
@@ -149,12 +139,11 @@ export default function HomeScreen({ navigation }) {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor={colors.textSecondary}
+            tintColor={theme.textSecondary}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Balance */}
         <BalanceCard 
           balance={displayBalance}
           change={change}
@@ -162,8 +151,7 @@ export default function HomeScreen({ navigation }) {
           positive={change >= 0}
         />
 
-        {/* Action Buttons */}
-        <View style={styles.actionsContainer}>
+        <View style={[styles.actionsContainer, { borderBottomColor: theme.divider }]}>
           <ActionButton 
             icon="↑" 
             label="Send" 
@@ -188,33 +176,31 @@ export default function HomeScreen({ navigation }) {
           />
         </View>
 
-        {/* Stats Card */}
-        <View style={styles.statsCard}>
+        <View style={[styles.statsCard, { backgroundColor: theme.cardBackground }]}>
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{height?.height ?? '—'}</Text>
-              <Text style={styles.statLabel}>Block Height</Text>
+              <Text style={[styles.statValue, { color: theme.textPrimary }]}>{height?.height ?? '—'}</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Block Height</Text>
             </View>
-            <View style={styles.statDivider} />
+            <View style={[styles.statDivider, { backgroundColor: theme.divider }]} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalTxns}</Text>
-              <Text style={styles.statLabel}>7d Transactions</Text>
+              <Text style={[styles.statValue, { color: theme.textPrimary }]}>{totalTxns}</Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>7d Transactions</Text>
             </View>
           </View>
         </View>
 
-        {/* Recent Activity */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Recent Activity</Text>
           <Text 
-            style={styles.seeAll}
+            style={[styles.seeAll, { color: theme.accent }]}
             onPress={() => navigation.navigate('Activity')}
           >
             See All
           </Text>
         </View>
 
-        <View style={styles.transactionsList}>
+        <View style={[styles.transactionsList, { backgroundColor: theme.cardBackground }]}>
           {transactions.length > 0 ? (
             transactions.slice(0, 5).map((tx, index) => (
               <TransactionItem
@@ -228,15 +214,14 @@ export default function HomeScreen({ navigation }) {
             ))
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No recent activity</Text>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No recent activity</Text>
             </View>
           )}
         </View>
 
-        {/* Quick Links */}
         <View style={styles.quickLinks}>
           <Text 
-            style={styles.quickLink}
+            style={[styles.quickLink, { color: theme.accent }]}
             onPress={() => navigation.navigate('BlocksTab')}
           >
             View Blocks →
@@ -249,11 +234,9 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -266,19 +249,16 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.green,
     justifyContent: 'center',
     alignItems: 'center',
   },
   profileText: {
-    color: colors.background,
     fontWeight: '700',
     fontSize: 14,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
   },
   statusDot: {
     width: 32,
@@ -291,12 +271,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  dotOnline: {
-    backgroundColor: colors.green,
-  },
-  dotOffline: {
-    backgroundColor: colors.red,
-  },
   scrollView: {
     flex: 1,
   },
@@ -306,11 +280,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
     borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
   },
   statsCard: {
     margin: 20,
-    backgroundColor: colors.cardBackground,
     borderRadius: 16,
     padding: 20,
   },
@@ -325,17 +297,14 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: colors.textPrimary,
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 13,
-    color: colors.textSecondary,
   },
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: colors.divider,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -348,15 +317,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: colors.textPrimary,
   },
   seeAll: {
     fontSize: 14,
-    color: colors.green,
     fontWeight: '600',
   },
   transactionsList: {
-    backgroundColor: colors.cardBackground,
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
@@ -367,7 +333,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: colors.textSecondary,
   },
   quickLinks: {
     paddingHorizontal: 20,
@@ -375,7 +340,6 @@ const styles = StyleSheet.create({
   },
   quickLink: {
     fontSize: 16,
-    color: colors.green,
     fontWeight: '600',
   },
 });

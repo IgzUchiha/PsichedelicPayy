@@ -1,0 +1,9 @@
+target/
+node_modules/
+.git/
+mobile-app/
+eth/node_modules/
+eth/artifacts/
+eth/cache/
+*.log
+.DS_Store

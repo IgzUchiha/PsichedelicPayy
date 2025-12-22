@@ -1,4 +1,17 @@
-# Build stage
+# Stage 1: Build Solidity contracts
+FROM node:18-bullseye AS eth-builder
+
+WORKDIR /app/eth
+
+# Copy eth package files
+COPY eth/package.json eth/yarn.lock ./
+RUN yarn install --frozen-lockfile
+
+# Copy contract sources and compile
+COPY eth/ ./
+RUN yarn hardhat compile
+
+# Stage 2: Build Rust binary
 FROM rust:1.68-bullseye AS builder
 
 # Install nightly toolchain
@@ -22,6 +35,9 @@ RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /app
+
+# Copy compiled contract artifacts from eth-builder
+COPY --from=eth-builder /app/eth/artifacts ./eth/artifacts
 
 # Copy workspace files
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./

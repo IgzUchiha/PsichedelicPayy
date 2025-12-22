@@ -19,14 +19,17 @@ RUN rustup toolchain install nightly-2023-01-04 && \
     rustup default nightly-2023-01-04 && \
     rustup component add clippy
 
-# Install build dependencies including Go (required by geth-utils)
+# Install build dependencies including Go (required by geth-utils) and Git LFS
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libclang-dev \
     cmake \
     wget \
-    && rm -rf /var/lib/apt/lists/*
+    git \
+    git-lfs \
+    && rm -rf /var/lib/apt/lists/* \
+    && git lfs install
 
 # Install Go 1.21
 RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
@@ -42,6 +45,14 @@ COPY --from=eth-builder /app/eth/artifacts ./eth/artifacts
 # Copy workspace files
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY pkg ./pkg
+
+# Copy fixtures BEFORE building (needed for include_bytes! macro)
+# If LFS files are pointers, this will fail - Railway must have LFS enabled
+COPY fixtures ./fixtures
+
+# Verify the param files exist and are not LFS pointers
+RUN ls -la fixtures/params/ && \
+    head -c 100 fixtures/params/kzg_bn254_6.srs | xxd | head -5
 
 # Build release binary
 RUN cargo build --release --bin node

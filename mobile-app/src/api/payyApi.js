@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Update this to your machine's IP address if testing on physical device
-// or use 'localhost' for simulator
-const BASE_URL = 'http://192.168.1.71:8080';
+// Use environment variable or fallback to localhost
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
 
 // For iOS simulator, use: http://localhost:8080
 // For Android emulator, use: http://10.0.2.2:8080

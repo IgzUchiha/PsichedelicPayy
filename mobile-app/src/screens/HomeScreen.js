@@ -1,12 +1,58 @@
 import { useState, useEffect } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, ScrollView, RefreshControl, StyleSheet, Text, StatusBar, Alert, Image, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import BalanceCard from '../components/BalanceCard';
 import ActionButton from '../components/ActionButton';
 import TransactionItem from '../components/TransactionItem';
 import { useWallet } from '../context/WalletContext';
+import ChainIcon from '../components/ChainIcon';
 import payyApi from '../api/payyApi';
+
+// Chain balance data with gradient colors
+const CHAIN_BALANCES = [
+  { 
+    id: 'btc', 
+    name: 'Bitcoin', 
+    symbol: 'BTC', 
+    icon: '₿',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#F7931A', '#FF6B00'],
+    shadowColor: '#F7931A',
+  },
+  { 
+    id: 'eth', 
+    name: 'Ethereum', 
+    symbol: 'ETH', 
+    icon: 'Ξ',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#627EEA', '#3C3C3D'],
+    shadowColor: '#627EEA',
+  },
+  { 
+    id: 'sol', 
+    name: 'Solana', 
+    symbol: 'SOL', 
+    icon: '◎',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#9945FF', '#14F195'],
+    shadowColor: '#9945FF',
+  },
+  { 
+    id: 'polygon', 
+    name: 'Polygon', 
+    symbol: 'MATIC', 
+    icon: '⬡',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#8247E5', '#A379FF'],
+    shadowColor: '#8247E5',
+  },
+];
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -219,6 +265,51 @@ export default function HomeScreen({ navigation }) {
           )}
         </View>
 
+        {/* Chain Balances Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Your Balances</Text>
+        </View>
+
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chainCardsContainer}
+        >
+          {CHAIN_BALANCES.map((chain) => (
+            <TouchableOpacity 
+              key={chain.id} 
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('ChainDetail', { 
+                chainId: chain.id, 
+                balance: chain.balance, 
+                usdValue: chain.usdValue 
+              })}
+            >
+              <LinearGradient
+                colors={chain.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.chainCard, { shadowColor: chain.shadowColor }]}
+              >
+                <View style={styles.chainCardHeader}>
+                  <View style={styles.chainIconWrapper}>
+                    <ChainIcon chainId={chain.id} size={28} color="#fff" />
+                  </View>
+                  <View style={styles.chainCardBadge}>
+                    <Text style={styles.chainCardBadgeText}>{chain.symbol}</Text>
+                  </View>
+                </View>
+                <Text style={styles.chainCardName}>{chain.name}</Text>
+                <View style={styles.chainCardBalance}>
+                  <Text style={styles.chainCardAmount}>{chain.balance}</Text>
+                  <Text style={styles.chainCardSymbol}>{chain.symbol}</Text>
+                </View>
+                <Text style={styles.chainCardUsd}>${chain.usdValue} USD</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <View style={styles.quickLinks}>
           <Text 
             style={[styles.quickLink, { color: theme.accent }]}
@@ -341,5 +432,74 @@ const styles = StyleSheet.create({
   quickLink: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  chainCardsContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  chainCard: {
+    width: 160,
+    height: 180,
+    borderRadius: 20,
+    padding: 16,
+    justifyContent: 'space-between',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  chainCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  chainIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chainCardIcon: {
+    fontSize: 24,
+    color: '#fff',
+    fontWeight: '700',
+  },
+  chainCardBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  chainCardBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  chainCardName: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  chainCardBalance: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  chainCardAmount: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  chainCardSymbol: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  chainCardUsd: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
   },
 });

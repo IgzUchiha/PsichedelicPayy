@@ -14,6 +14,7 @@ import SubmitTransactionScreen from './src/screens/SubmitTransactionScreen';
 import ReceiveScreen from './src/screens/ReceiveScreen';
 import ImportWalletScreen from './src/screens/ImportWalletScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ChainDetailScreen from './src/screens/ChainDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -145,6 +146,14 @@ function AppContent() {
             component={ImportWalletScreen}
             options={{
               presentation: 'modal',
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="ChainDetail"
+            component={ChainDetailScreen}
+            options={{
+              presentation: 'card',
               headerShown: false,
             }}
           />

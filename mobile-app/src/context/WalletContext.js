@@ -1,17 +1,21 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { Wallet, computeAddress } from 'ethers';
+import { CHAINS, SUPPORTED_CHAINS, getAddressForChain } from '../utils/chains';
 
 const WalletContext = createContext(null);
 
 const WALLET_STORAGE_KEY = 'payy_wallet';
 const NOTES_STORAGE_KEY = 'payy_notes';
+const ACTIVE_CHAIN_KEY = 'payy_active_chain';
 
 export function WalletProvider({ children }) {
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(null);
   const [notes, setNotes] = useState([]); // UTXO notes owned by this wallet
+  const [activeChain, setActiveChain] = useState('eth'); // Default to Ethereum
+  const [chainBalances, setChainBalances] = useState({}); // Balances per chain
 
   // Load wallet and notes from secure storage on app start
   useEffect(() => {
@@ -24,6 +28,12 @@ export function WalletProvider({ children }) {
       if (storedWallet) {
         const walletData = JSON.parse(storedWallet);
         setWallet(walletData);
+      }
+      
+      // Load active chain preference
+      const storedChain = await SecureStore.getItemAsync(ACTIVE_CHAIN_KEY);
+      if (storedChain) {
+        setActiveChain(storedChain);
       }
       
       // Load stored notes
@@ -210,6 +220,33 @@ export function WalletProvider({ children }) {
     calculateBalance(notes);
   };
 
+  // Switch active chain
+  const switchChain = async (chainId) => {
+    try {
+      setActiveChain(chainId);
+      await SecureStore.setItemAsync(ACTIVE_CHAIN_KEY, chainId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error switching chain:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Get address for current or specified chain
+  const getChainAddress = (chainId = activeChain) => {
+    if (!wallet?.privateKey) return null;
+    return getAddressForChain(wallet.privateKey, chainId);
+  };
+
+  // Get all chain addresses
+  const getAllAddresses = () => {
+    if (!wallet?.privateKey) return {};
+    return SUPPORTED_CHAINS.reduce((acc, chain) => {
+      acc[chain.toLowerCase()] = getAddressForChain(wallet.privateKey, chain.toLowerCase());
+      return acc;
+    }, {});
+  };
+
   const createWallet = async (name = 'My Wallet') => {
     try {
       const newWallet = Wallet.createRandom();
@@ -244,6 +281,8 @@ export function WalletProvider({ children }) {
         balance,
         notes,
         loading,
+        activeChain,
+        chainBalances,
         createWallet,
         importWallet,
         removeWallet,
@@ -254,6 +293,11 @@ export function WalletProvider({ children }) {
         clearNotes,
         markNotesPending,
         unmarkNotesPending,
+        switchChain,
+        getChainAddress,
+        getAllAddresses,
+        supportedChains: SUPPORTED_CHAINS,
+        chains: CHAINS,
         hasWallet: !!wallet,
       }}
     >

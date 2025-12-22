@@ -6,13 +6,20 @@ RUN rustup toolchain install nightly-2023-01-04 && \
     rustup default nightly-2023-01-04 && \
     rustup component add clippy
 
-# Install build dependencies
+# Install build dependencies including Go (required by geth-utils)
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libclang-dev \
     cmake \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Go 1.21
+RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz \
+    && rm go1.21.5.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
 
 WORKDIR /app
 

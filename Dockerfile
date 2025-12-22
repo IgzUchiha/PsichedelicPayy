@@ -19,17 +19,23 @@ RUN rustup toolchain install nightly-2023-01-04 && \
     rustup default nightly-2023-01-04 && \
     rustup component add clippy
 
-# Install build dependencies including Go (required by geth-utils) and Git LFS
-RUN apt-get update && apt-get install -y \
+# Install build dependencies with retry logic for network issues
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     libclang-dev \
     cmake \
     wget \
-    git \
-    git-lfs \
-    && rm -rf /var/lib/apt/lists/* \
-    && git lfs install
+    ca-certificates \
+    || (sleep 5 && apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    cmake \
+    wget \
+    ca-certificates) \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Go 1.21
 RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
@@ -47,12 +53,14 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY pkg ./pkg
 
 # Copy fixtures BEFORE building (needed for include_bytes! macro)
-# If LFS files are pointers, this will fail - Railway must have LFS enabled
 COPY fixtures ./fixtures
 
-# Verify the param files exist and are not LFS pointers
-RUN ls -la fixtures/params/ && \
-    head -c 100 fixtures/params/kzg_bn254_6.srs | xxd | head -5
+# Verify the param files exist and have actual content (not LFS pointers)
+RUN echo "Checking fixtures..." && \
+    ls -la fixtures/params/ && \
+    file fixtures/params/kzg_bn254_6.srs && \
+    test $(stat -c%s fixtures/params/kzg_bn254_6.srs) -gt 1000 || \
+    (echo "ERROR: LFS files not fetched! File is too small." && exit 1)
 
 # Build release binary
 RUN cargo build --release --bin node

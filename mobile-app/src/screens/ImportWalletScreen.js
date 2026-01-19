@@ -16,48 +16,51 @@ import { useWallet } from '../context/WalletContext';
 
 export default function ImportWalletScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { importWallet, createWallet } = useWallet();
+  const { importWallet, importFromMnemonic } = useWallet();
+  const [importType, setImportType] = useState('seed'); // 'seed' or 'key'
+  const [seedPhrase, setSeedPhrase] = useState('');
   const [privateKey, setPrivateKey] = useState('');
   const [walletName, setWalletName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showKey, setShowKey] = useState(false);
-
-  const handleCreateNew = async () => {
-    setLoading(true);
-    const result = await createWallet(walletName || 'My Wallet');
-    setLoading(false);
-
-    if (result.success) {
-      Alert.alert(
-        'Wallet Created! 🎉',
-        `Your new wallet has been created.\n\nAddress:\n${result.address}\n\n⚠️ Save your recovery phrase:\n${result.mnemonic}`,
-        [{ text: 'Done', onPress: () => navigation.goBack() }]
-      );
-    } else {
-      Alert.alert('Creation Failed', result.error || 'Could not create wallet.');
-    }
-  };
+  const [showInput, setShowInput] = useState(false);
 
   const handleImport = async () => {
-    if (!privateKey.trim()) {
-      Alert.alert('Error', 'Please enter your private key');
-      return;
-    }
-
     setLoading(true);
-    const result = await importWallet(privateKey, walletName || 'My Wallet');
+    
+    let result;
+    if (importType === 'seed') {
+      if (!seedPhrase.trim()) {
+        Alert.alert('Error', 'Please enter your seed phrase');
+        setLoading(false);
+        return;
+      }
+      result = await importFromMnemonic(seedPhrase, walletName || 'My Wallet');
+    } else {
+      if (!privateKey.trim()) {
+        Alert.alert('Error', 'Please enter your private key');
+        setLoading(false);
+        return;
+      }
+      result = await importWallet(privateKey, walletName || 'My Wallet');
+    }
+    
     setLoading(false);
 
     if (result.success) {
-      Alert.alert(
-        'Wallet Imported! 🎉',
-        `Your wallet has been imported successfully.\n\nAddress: ${result.address.slice(0, 10)}...${result.address.slice(-8)}`,
-        [{ text: 'Done', onPress: () => navigation.goBack() }]
-      );
+      // Navigate to main app
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Main' }],
+      });
     } else {
-      Alert.alert('Import Failed', result.error || 'Could not import wallet. Please check your private key.');
+      Alert.alert(
+        'Import Failed', 
+        result.error || `Could not import wallet. Please check your ${importType === 'seed' ? 'seed phrase' : 'private key'}.`
+      );
     }
   };
+
+  const isValid = importType === 'seed' ? seedPhrase.trim().split(/\s+/).length >= 12 : privateKey.trim().length > 0;
 
   return (
     <KeyboardAvoidingView
@@ -66,23 +69,43 @@ export default function ImportWalletScreen({ navigation }) {
     >
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
-          <Text style={styles.closeText}>✕</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Import Wallet</Text>
-        <View style={styles.placeholder} />
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Icon */}
         <View style={styles.iconContainer}>
-          <Text style={styles.icon}>🔑</Text>
+          <Text style={styles.icon}>🔐</Text>
         </View>
 
-        <Text style={styles.title}>Import Existing Wallet</Text>
+        <Text style={styles.title}>Restore Your Wallet</Text>
         <Text style={styles.subtitle}>
-          Enter your private key to restore your wallet and access your funds.
+          Import your existing wallet using your seed phrase or private key.
         </Text>
+
+        {/* Import Type Toggle */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, importType === 'seed' && styles.toggleButtonActive]}
+            onPress={() => setImportType('seed')}
+          >
+            <Text style={[styles.toggleText, importType === 'seed' && styles.toggleTextActive]}>
+              Seed Phrase
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, importType === 'key' && styles.toggleButtonActive]}
+            onPress={() => setImportType('key')}
+          >
+            <Text style={[styles.toggleText, importType === 'key' && styles.toggleTextActive]}>
+              Private Key
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Wallet Name */}
         <View style={styles.inputSection}>
@@ -96,73 +119,73 @@ export default function ImportWalletScreen({ navigation }) {
           />
         </View>
 
-        {/* Private Key */}
-        <View style={styles.inputSection}>
-          <View style={styles.labelRow}>
-            <Text style={styles.inputLabel}>Private Key</Text>
-            <TouchableOpacity onPress={() => setShowKey(!showKey)}>
-              <Text style={styles.toggleText}>{showKey ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
+        {/* Seed Phrase Input */}
+        {importType === 'seed' && (
+          <View style={styles.inputSection}>
+            <View style={styles.labelRow}>
+              <Text style={styles.inputLabel}>Seed Phrase (12 or 24 words)</Text>
+              <TouchableOpacity onPress={() => setShowInput(!showInput)}>
+                <Text style={styles.toggleShowText}>{showInput ? 'Hide' : 'Show'}</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.textInput, styles.seedInput]}
+              value={seedPhrase}
+              onChangeText={setSeedPhrase}
+              placeholder="Enter your seed phrase, words separated by spaces"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!showInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+            />
+            <Text style={styles.wordCount}>
+              {seedPhrase.trim() ? seedPhrase.trim().split(/\s+/).length : 0} words
+            </Text>
           </View>
-          <TextInput
-            style={[styles.textInput, styles.keyInput]}
-            value={privateKey}
-            onChangeText={setPrivateKey}
-            placeholder="Enter your private key (hex or base64)"
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry={!showKey}
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline={showKey}
-          />
-        </View>
+        )}
 
-        {/* Supported Formats */}
-        <View style={styles.formatsCard}>
-          <Text style={styles.formatsTitle}>Supported Formats</Text>
-          <Text style={styles.formatItem}>• Hex (64 characters): 0x1234...abcd</Text>
-          <Text style={styles.formatItem}>• Base64 (44 characters): ABC123...xyz=</Text>
-        </View>
+        {/* Private Key Input */}
+        {importType === 'key' && (
+          <View style={styles.inputSection}>
+            <View style={styles.labelRow}>
+              <Text style={styles.inputLabel}>Private Key</Text>
+              <TouchableOpacity onPress={() => setShowInput(!showInput)}>
+                <Text style={styles.toggleShowText}>{showInput ? 'Hide' : 'Show'}</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={[styles.textInput, styles.keyInput]}
+              value={privateKey}
+              onChangeText={setPrivateKey}
+              placeholder="Enter your private key (0x...)"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!showInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline={showInput}
+            />
+          </View>
+        )}
 
         {/* Warning */}
         <View style={styles.warningCard}>
-          <Text style={styles.warningIcon}>⚠️</Text>
+          <Text style={styles.warningIcon}>🔒</Text>
           <View style={styles.warningContent}>
-            <Text style={styles.warningTitle}>Keep Your Key Safe</Text>
+            <Text style={styles.warningTitle}>Non-Custodial Wallet</Text>
             <Text style={styles.warningText}>
-              Your private key is stored securely on this device. Never share it with anyone.
+              Your keys are stored securely on this device only. We never have access to your funds.
             </Text>
           </View>
         </View>
-
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Create New Wallet */}
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={handleCreateNew}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.createIcon}>✨</Text>
-          <View style={styles.createContent}>
-            <Text style={styles.createTitle}>Create New Wallet</Text>
-            <Text style={styles.createSubtitle}>Generate a fresh wallet with a new address</Text>
-          </View>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Import Button */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.importButton, (!privateKey.trim() || loading) && styles.importButtonDisabled]}
+          style={[styles.importButton, (!isValid || loading) && styles.importButtonDisabled]}
           onPress={handleImport}
-          disabled={!privateKey.trim() || loading}
+          disabled={!isValid || loading}
           activeOpacity={0.8}
         >
           <Text style={styles.importButtonText}>
@@ -186,23 +209,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  closeButton: {
-    width: 32,
-    height: 32,
+  backButton: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeText: {
-    fontSize: 20,
-    color: colors.textSecondary,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+  backText: {
+    fontSize: 28,
     color: colors.textPrimary,
   },
-  placeholder: {
-    width: 32,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
   },
   scrollView: {
     flex: 1,
@@ -228,7 +248,31 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 32,
+    marginBottom: 24,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardBackground,
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 24,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.green,
+  },
+  toggleText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  toggleTextActive: {
+    color: colors.background,
   },
   inputSection: {
     marginBottom: 20,
@@ -243,7 +287,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 8,
   },
-  toggleText: {
+  toggleShowText: {
     fontSize: 14,
     color: colors.green,
     fontWeight: '600',
@@ -257,37 +301,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  seedInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
   keyInput: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  formatsCard: {
-    backgroundColor: colors.cardBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  formatsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  formatItem: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  wordCount: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 8,
+    textAlign: 'right',
   },
   warningCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    backgroundColor: colors.cardBackground,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
   },
   warningIcon: {
-    fontSize: 20,
+    fontSize: 24,
     marginRight: 12,
   },
   warningContent: {
@@ -296,7 +332,7 @@ const styles = StyleSheet.create({
   warningTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.red,
+    color: colors.green,
     marginBottom: 4,
   },
   warningText: {
@@ -311,56 +347,16 @@ const styles = StyleSheet.create({
   },
   importButton: {
     backgroundColor: colors.green,
-    borderRadius: 28,
+    borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
   },
   importButtonDisabled: {
-    backgroundColor: colors.surfaceLight,
+    opacity: 0.5,
   },
   importButtonText: {
     fontSize: 17,
     fontWeight: '700',
     color: colors.background,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.surfaceLight,
-  },
-  dividerText: {
-    fontSize: 14,
-    color: colors.textMuted,
-    marginHorizontal: 16,
-  },
-  createButton: {
-    flexDirection: 'row',
-    backgroundColor: colors.cardBackground,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  createIcon: {
-    fontSize: 32,
-    marginRight: 16,
-  },
-  createContent: {
-    flex: 1,
-  },
-  createTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  createSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
   },
 });

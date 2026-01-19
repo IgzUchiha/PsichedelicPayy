@@ -1,8 +1,68 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet, Text, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
+import { View, ScrollView, RefreshControl, StyleSheet, Text, TouchableOpacity, Platform, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import payyApi from '../api/payyApi';
+
+// Skeleton loader component
+function SkeletonLoader({ width, height, style }) {
+  const animatedValue = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(animatedValue, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
+
+  const opacity = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        { width, height, backgroundColor: colors.surfaceLight, borderRadius: 8, opacity },
+        style,
+      ]}
+    />
+  );
+}
+
+function BlockSkeleton() {
+  return (
+    <View style={styles.blockItem}>
+      <View style={styles.blockHeader}>
+        <SkeletonLoader width={60} height={28} style={{ borderRadius: 12 }} />
+        <SkeletonLoader width={70} height={14} />
+      </View>
+      <View style={styles.blockDetails}>
+        <View style={styles.blockRow}>
+          <SkeletonLoader width={40} height={14} />
+          <SkeletonLoader width={100} height={14} />
+        </View>
+        <View style={styles.blockRow}>
+          <SkeletonLoader width={80} height={14} />
+          <SkeletonLoader width={30} height={14} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <View style={styles.statCard}>
+      <SkeletonLoader width={50} height={28} style={{ marginBottom: 4 }} />
+      <SkeletonLoader width={70} height={12} />
+    </View>
+  );
+}
 
 function BlockItem({ height, hash, rootHash, txCount, timestamp }) {
   return (
@@ -61,7 +121,6 @@ export default function BlocksScreen() {
     fetchBlocks();
   };
 
-  // Format blocks for display
   const displayBlocks = blocks.map(b => ({
     height: b.height,
     hash: b.hash ? `${b.hash.slice(0, 6)}...${b.hash.slice(-4)}` : 'N/A',
@@ -69,15 +128,6 @@ export default function BlocksScreen() {
     txCount: b.transaction_count || b.txns?.length || 0,
     timestamp: b.timestamp ? new Date(b.timestamp * 1000).toLocaleTimeString() : 'Recent',
   }));
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centerContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={colors.green} />
-        <Text style={styles.loadingText}>Loading blocks...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -89,14 +139,23 @@ export default function BlocksScreen() {
 
       {/* Stats */}
       <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{displayBlocks[0]?.height ?? '—'}</Text>
-          <Text style={styles.statLabel}>Latest Block</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{blocks.length}</Text>
-          <Text style={styles.statLabel}>Total Blocks</Text>
-        </View>
+        {loading ? (
+          <>
+            <StatSkeleton />
+            <StatSkeleton />
+          </>
+        ) : (
+          <>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{displayBlocks[0]?.height ?? '—'}</Text>
+              <Text style={styles.statLabel}>Latest Block</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{blocks.length}</Text>
+              <Text style={styles.statLabel}>Total Blocks</Text>
+            </View>
+          </>
+        )}
       </View>
 
       <ScrollView
@@ -112,7 +171,13 @@ export default function BlocksScreen() {
       >
         <Text style={styles.sectionTitle}>Recent Blocks</Text>
         
-        {displayBlocks.length > 0 ? (
+        {loading ? (
+          <View style={styles.blocksList}>
+            {[1, 2, 3, 4].map((i) => (
+              <BlockSkeleton key={i} />
+            ))}
+          </View>
+        ) : displayBlocks.length > 0 ? (
           <View style={styles.blocksList}>
             {displayBlocks.map((block, index) => (
               <BlockItem
@@ -145,15 +210,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  centerContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: colors.textSecondary,
   },
   header: {
     paddingHorizontal: 20,

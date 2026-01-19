@@ -1,9 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, RefreshControl, StyleSheet, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, ScrollView, RefreshControl, StyleSheet, Text, TouchableOpacity, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import TransactionItem from '../components/TransactionItem';
 import payyApi from '../api/payyApi';
+
+// Skeleton loader component
+function SkeletonLoader({ width, height, style }) {
+  const animatedValue = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animatedValue, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(animatedValue, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, []);
+
+  const opacity = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        { width, height, backgroundColor: colors.surfaceLight, borderRadius: 8, opacity },
+        style,
+      ]}
+    />
+  );
+}
+
+function TransactionSkeleton() {
+  return (
+    <View style={styles.skeletonItem}>
+      <View style={styles.skeletonLeft}>
+        <SkeletonLoader width={40} height={40} style={{ borderRadius: 20 }} />
+        <View style={{ marginLeft: 12 }}>
+          <SkeletonLoader width={120} height={16} style={{ marginBottom: 6 }} />
+          <SkeletonLoader width={80} height={12} />
+        </View>
+      </View>
+      <SkeletonLoader width={60} height={16} />
+    </View>
+  );
+}
 
 export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
@@ -40,22 +85,12 @@ export default function TransactionsScreen() {
     fetchTransactions();
   };
 
-  // Filter transactions based on selected filter
   const filteredTransactions = transactions.filter(tx => {
     if (filter === 'all') return true;
     if (filter === 'sent') return tx.type === 'send';
     if (filter === 'received') return tx.type === 'receive';
     return true;
   });
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centerContainer, { paddingTop: insets.top }]}>
-        <ActivityIndicator size="large" color={colors.green} />
-        <Text style={styles.loadingText}>Loading activity...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -90,8 +125,13 @@ export default function TransactionsScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Transactions List */}
-        {filteredTransactions.length > 0 ? (
+        {loading ? (
+          <View style={styles.transactionsList}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <TransactionSkeleton key={i} />
+            ))}
+          </View>
+        ) : filteredTransactions.length > 0 ? (
           <View style={styles.transactionsList}>
             {filteredTransactions.map((tx, index) => (
               <TransactionItem
@@ -124,15 +164,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  centerContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: colors.textSecondary,
   },
   header: {
     paddingHorizontal: 20,
@@ -174,6 +205,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
+  },
+  skeletonItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  skeletonLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   emptyState: {
     alignItems: 'center',

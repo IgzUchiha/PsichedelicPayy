@@ -30,19 +30,22 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const { wallet, balance, hasWallet, removeWallet, loading } = useWallet();
 
-  const handleRemoveWallet = () => {
+  const handleSignOut = () => {
     Alert.alert(
-      'Remove Wallet',
-      'Are you sure you want to remove this wallet? Make sure you have backed up your private key.',
+      'Sign Out',
+      'Are you sure you want to sign out? Make sure you have backed up your seed phrase or private key.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
+          text: 'Sign Out',
           style: 'destructive',
           onPress: async () => {
             const result = await removeWallet();
             if (result.success) {
-              Alert.alert('Wallet Removed', 'Your wallet has been removed from this device.');
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Welcome' }],
+              });
             }
           },
         },
@@ -100,14 +103,22 @@ export default function ProfileScreen() {
             <>
               <SettingsItem
                 icon="🔑"
-                title="Backup Private Key"
-                subtitle="View and copy your private key"
+                title="Backup Seed Phrase"
+                subtitle="View your recovery phrase"
                 onPress={() => {
-                  Alert.alert(
-                    'Private Key',
-                    'For security, please write this down and store it safely.\n\n' + wallet?.privateKey,
-                    [{ text: 'Done' }]
-                  );
+                  if (wallet?.mnemonic) {
+                    Alert.alert(
+                      'Seed Phrase',
+                      'Write this down and store it safely. Never share it!\n\n' + wallet.mnemonic,
+                      [{ text: 'Done' }]
+                    );
+                  } else {
+                    Alert.alert(
+                      'Private Key',
+                      'For security, please write this down and store it safely.\n\n' + wallet?.privateKey,
+                      [{ text: 'Done' }]
+                    );
+                  }
                 }}
               />
               <SettingsItem
@@ -115,13 +126,6 @@ export default function ProfileScreen() {
                 title="Copy Address"
                 subtitle={shortAddress}
                 onPress={() => Alert.alert('Copied!', 'Address copied to clipboard')}
-              />
-              <SettingsItem
-                icon="🗑️"
-                title="Remove Wallet"
-                subtitle="Delete wallet from this device"
-                onPress={handleRemoveWallet}
-                danger
               />
             </>
           ) : (
@@ -176,6 +180,22 @@ export default function ProfileScreen() {
             onPress={() => {}}
           />
         </View>
+
+        {/* Sign Out Section */}
+        {hasWallet && (
+          <>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.settingsGroup}>
+              <SettingsItem
+                icon="🚪"
+                title="Sign Out"
+                subtitle="Remove wallet from this device"
+                onPress={handleSignOut}
+                danger
+              />
+            </View>
+          </>
+        )}
 
         {/* Version */}
         <Text style={styles.version}>Payy v1.0.0</Text>

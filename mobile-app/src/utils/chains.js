@@ -1,5 +1,4 @@
 // Multi-chain configuration and utilities
-import { Wallet, computeAddress } from 'ethers';
 
 export const CHAINS = {
   ETH: {
@@ -38,18 +37,19 @@ export const CHAINS = {
 
 export const SUPPORTED_CHAINS = ['ETH', 'BTC', 'SOL', 'POLYGON'];
 
-// Derive EVM address from private key
-export function deriveEVMAddress(privateKey) {
+// Derive EVM address from private key (lazy load ethers)
+export async function deriveEVMAddress(privateKey) {
+  const { computeAddress } = await import('ethers');
   const cleanKey = privateKey.startsWith('0x') ? privateKey : '0x' + privateKey;
   return computeAddress(cleanKey);
 }
 
 // Derive Bitcoin address from private key (simplified - P2PKH)
 // In production, use a proper BTC library like bitcoinjs-lib
-export function deriveBTCAddress(privateKey) {
+export async function deriveBTCAddress(privateKey) {
   // For demo: derive a mock BTC address from the ETH private key
   // Real implementation would use secp256k1 + RIPEMD160 + Base58Check
-  const evmAddr = deriveEVMAddress(privateKey);
+  const evmAddr = await deriveEVMAddress(privateKey);
   // Convert to BTC-like format (this is a placeholder)
   const btcPrefix = '1'; // Mainnet P2PKH
   const hash = evmAddr.slice(2, 34); // Use part of ETH address
@@ -58,26 +58,26 @@ export function deriveBTCAddress(privateKey) {
 
 // Derive Solana address from private key (simplified)
 // In production, use @solana/web3.js
-export function deriveSOLAddress(privateKey) {
+export async function deriveSOLAddress(privateKey) {
   // For demo: derive a mock SOL address
   // Real implementation would use Ed25519 keypair
-  const evmAddr = deriveEVMAddress(privateKey);
+  const evmAddr = await deriveEVMAddress(privateKey);
   // Solana addresses are base58 encoded 32-byte public keys
   return evmAddr.slice(2, 46); // Placeholder
 }
 
 // Get address for a specific chain
-export function getAddressForChain(privateKey, chainId) {
+export async function getAddressForChain(privateKey, chainId) {
   switch (chainId) {
     case 'eth':
     case 'polygon':
-      return deriveEVMAddress(privateKey);
+      return await deriveEVMAddress(privateKey);
     case 'btc':
-      return deriveBTCAddress(privateKey);
+      return await deriveBTCAddress(privateKey);
     case 'sol':
-      return deriveSOLAddress(privateKey);
+      return await deriveSOLAddress(privateKey);
     default:
-      return deriveEVMAddress(privateKey);
+      return await deriveEVMAddress(privateKey);
   }
 }
 

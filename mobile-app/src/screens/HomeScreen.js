@@ -13,6 +13,16 @@ import payyApi from '../api/payyApi';
 // Chain balance data with gradient colors
 const CHAIN_BALANCES = [
   { 
+    id: 'psi', 
+    name: 'PSI Rollup', 
+    symbol: 'USDC', 
+    icon: '$',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#00C805', '#00A804'],
+    shadowColor: '#00C805',
+  },
+  { 
     id: 'btc', 
     name: 'Bitcoin', 
     symbol: 'BTC', 
@@ -33,90 +43,46 @@ const CHAIN_BALANCES = [
     shadowColor: '#627EEA',
   },
   { 
-    id: 'sol', 
-    name: 'Solana', 
-    symbol: 'SOL', 
-    icon: '◎',
+    id: 'arb', 
+    name: 'Arbitrum', 
+    symbol: 'ARB', 
+    icon: '🔵',
     balance: '0.00', 
     usdValue: '0.00',
-    gradient: ['#9945FF', '#14F195'],
-    shadowColor: '#9945FF',
+    gradient: ['#28A0F0', '#1868B7'],
+    shadowColor: '#28A0F0',
   },
   { 
-    id: 'polygon', 
-    name: 'Polygon', 
-    symbol: 'MATIC', 
-    icon: '⬡',
+    id: 'op', 
+    name: 'Optimism', 
+    symbol: 'OP', 
+    icon: '🔴',
     balance: '0.00', 
     usdValue: '0.00',
-    gradient: ['#8247E5', '#A379FF'],
-    shadowColor: '#8247E5',
+    gradient: ['#FF0420', '#CC0319'],
+    shadowColor: '#FF0420',
+  },
+  { 
+    id: 'base', 
+    name: 'Base', 
+    symbol: 'ETH', 
+    icon: '🔵',
+    balance: '0.00', 
+    usdValue: '0.00',
+    gradient: ['#0052FF', '#003ACC'],
+    shadowColor: '#0052FF',
   },
 ];
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { wallet, balance: walletBalance, hasWallet, refreshBalance, addNote } = useWallet();
+  const { wallet, balance: walletBalance, hasWallet, refreshBalance } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
-  const [faucetLoading, setFaucetLoading] = useState(false);
   const [stats, setStats] = useState(null);
   const [height, setHeight] = useState(null);
   const [health, setHealth] = useState(null);
   const [transactions, setTransactions] = useState([]);
-
-  const handleFaucet = async () => {
-    if (!hasWallet) {
-      Alert.alert('No Wallet', 'Please create or import a wallet first', [
-        { text: 'OK', onPress: () => navigation.navigate('ProfileTab') }
-      ]);
-      return;
-    }
-
-    Alert.alert(
-      'Request Test Tokens',
-      'This will mint $100 test USDC to your wallet. This may take up to a minute.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Request', 
-          onPress: async () => {
-            setFaucetLoading(true);
-            try {
-              const addressData = await payyApi.deriveAddress(wallet.privateKey);
-              const zkAddress = addressData.address;
-              const result = await payyApi.requestFaucet(zkAddress, 100_000_000);
-              
-              if (result.note) {
-                await addNote({
-                  address: result.note.address,
-                  psi: result.note.psi,
-                  value: result.amount,
-                  commitment: result.note.commitment,
-                  token: 'USDC',
-                  source: zkAddress,
-                });
-              }
-              
-              Alert.alert(
-                'Tokens Received! 🎉',
-                `$100 test USDC has been minted to your wallet.\n\nNote commitment: ${result.note?.commitment?.slice(0, 16)}...`,
-              );
-              fetchData();
-            } catch (err) {
-              console.error('Faucet error:', err);
-              Alert.alert(
-                'Faucet Error',
-                err.response?.data?.error?.message || err.message || 'Failed to request tokens'
-              );
-            } finally {
-              setFaucetLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
 
   const fetchData = async () => {
     try {
@@ -170,7 +136,7 @@ export default function HomeScreen({ navigation }) {
       
       <View style={styles.header}>
         <Image 
-          source={require('../../assets/IMG_3244.jpg')} 
+          source={require('../../assets/IMG_3244.png')} 
           style={styles.profileIcon}
         />
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>PSI</Text>
@@ -213,12 +179,6 @@ export default function HomeScreen({ navigation }) {
             label="Pay" 
             primary
             onPress={() => navigation.navigate('SubmitTransaction')}
-          />
-          <ActionButton 
-            icon={faucetLoading ? "⏳" : "💧"} 
-            label="Faucet" 
-            onPress={handleFaucet}
-            disabled={faucetLoading}
           />
         </View>
 

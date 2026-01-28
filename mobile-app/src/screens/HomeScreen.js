@@ -10,74 +10,22 @@ import { useWallet } from '../context/WalletContext';
 import ChainIcon from '../components/ChainIcon';
 import payyApi from '../api/payyApi';
 
-// Chain balance data with gradient colors
-const CHAIN_BALANCES = [
-  { 
-    id: 'psi', 
-    name: 'PSI Rollup', 
-    symbol: 'USDC', 
-    icon: '$',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#00C805', '#00A804'],
-    shadowColor: '#00C805',
-  },
-  { 
-    id: 'btc', 
-    name: 'Bitcoin', 
-    symbol: 'BTC', 
-    icon: '₿',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#F7931A', '#FF6B00'],
-    shadowColor: '#F7931A',
-  },
-  { 
-    id: 'eth', 
-    name: 'Ethereum', 
-    symbol: 'ETH', 
-    icon: 'Ξ',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#627EEA', '#3C3C3D'],
-    shadowColor: '#627EEA',
-  },
-  { 
-    id: 'arb', 
-    name: 'Arbitrum', 
-    symbol: 'ARB', 
-    icon: '🔵',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#28A0F0', '#1868B7'],
-    shadowColor: '#28A0F0',
-  },
-  { 
-    id: 'op', 
-    name: 'Optimism', 
-    symbol: 'OP', 
-    icon: '🔴',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#FF0420', '#CC0319'],
-    shadowColor: '#FF0420',
-  },
-  { 
-    id: 'base', 
-    name: 'Base', 
-    symbol: 'ETH', 
-    icon: '🔵',
-    balance: '0.00', 
-    usdValue: '0.00',
-    gradient: ['#0052FF', '#003ACC'],
-    shadowColor: '#0052FF',
-  },
-];
+// Gradient colors for each chain
+const CHAIN_GRADIENTS = {
+  psi: { gradient: ['#00C805', '#00A804'], shadowColor: '#00C805' },
+  ethereum: { gradient: ['#627EEA', '#3C3C3D'], shadowColor: '#627EEA' },
+  arbitrum: { gradient: ['#28A0F0', '#1868B7'], shadowColor: '#28A0F0' },
+  optimism: { gradient: ['#FF0420', '#CC0319'], shadowColor: '#FF0420' },
+  polygon: { gradient: ['#8247E5', '#5C2EB3'], shadowColor: '#8247E5' },
+  base: { gradient: ['#0052FF', '#003ACC'], shadowColor: '#0052FF' },
+  bsc: { gradient: ['#F0B90B', '#CC9C09'], shadowColor: '#F0B90B' },
+  avalanche: { gradient: ['#E84142', '#C73435'], shadowColor: '#E84142' },
+};
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { wallet, balance: walletBalance, hasWallet, refreshBalance } = useWallet();
+  const { wallet, balance: walletBalance, hasWallet, refreshBalance, networkBalances, refreshNetworkBalances, loadingBalances } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState(null);
   const [height, setHeight] = useState(null);
@@ -108,6 +56,7 @@ export default function HomeScreen({ navigation }) {
       
       if (hasWallet) {
         await refreshBalance();
+        await refreshNetworkBalances();
       }
     } catch (err) {
     } finally {
@@ -129,6 +78,12 @@ export default function HomeScreen({ navigation }) {
   const displayBalance = walletBalance?.total || '0.00';
   const change = walletBalance?.change || 0;
   const changePercent = walletBalance?.changePercent || 0;
+
+  // Calculate total crypto balance in USD from all networks
+  const totalCryptoUsd = networkBalances?.reduce((sum, n) => sum + (n.usdValue || 0), 0) || 0;
+  const formattedCryptoUsd = totalCryptoUsd < 0.01 && totalCryptoUsd > 0 
+    ? '<$0.01' 
+    : '$' + totalCryptoUsd.toFixed(2);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
@@ -180,6 +135,43 @@ export default function HomeScreen({ navigation }) {
             primary
             onPress={() => navigation.navigate('SubmitTransaction')}
           />
+        </View>
+
+        {/* Cash & Crypto Breakdown */}
+        <View style={[styles.balanceBreakdown, { backgroundColor: theme.cardBackground }]}>
+          <TouchableOpacity 
+            style={styles.balanceRow}
+            onPress={() => navigation.navigate('CashDetail')}
+          >
+            <View style={styles.balanceRowLeft}>
+              <View style={[styles.balanceIcon, { backgroundColor: theme.accent + '20' }]}>
+                <Text style={[styles.balanceIconText, { color: theme.accent }]}>$</Text>
+              </View>
+              <Text style={[styles.balanceRowLabel, { color: theme.textPrimary }]}>Cash</Text>
+            </View>
+            <View style={styles.balanceRowRight}>
+              <Text style={[styles.balanceRowValue, { color: theme.textPrimary }]}>${displayBalance}</Text>
+              <Text style={[styles.balanceRowChevron, { color: theme.textSecondary }]}>›</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={[styles.balanceRowDivider, { backgroundColor: theme.divider }]} />
+
+          <TouchableOpacity 
+            style={styles.balanceRow}
+            onPress={() => navigation.navigate('CryptoDetail')}
+          >
+            <View style={styles.balanceRowLeft}>
+              <View style={[styles.balanceIcon, { backgroundColor: '#627EEA20' }]}>
+                <Text style={styles.balanceIconText}>⟠</Text>
+              </View>
+              <Text style={[styles.balanceRowLabel, { color: theme.textPrimary }]}>Crypto</Text>
+            </View>
+            <View style={styles.balanceRowRight}>
+              <Text style={[styles.balanceRowValue, { color: theme.textPrimary }]}>{formattedCryptoUsd}</Text>
+              <Text style={[styles.balanceRowChevron, { color: theme.textSecondary }]}>›</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.statsCard, { backgroundColor: theme.cardBackground }]}>
@@ -235,39 +227,76 @@ export default function HomeScreen({ navigation }) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chainCardsContainer}
         >
-          {CHAIN_BALANCES.map((chain) => (
-            <TouchableOpacity 
-              key={chain.id} 
-              activeOpacity={0.9}
-              onPress={() => navigation.navigate('ChainDetail', { 
-                chainId: chain.id, 
-                balance: chain.balance, 
-                usdValue: chain.usdValue 
-              })}
+          {/* PSI Rollup Card */}
+          <TouchableOpacity 
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('CashDetail')}
+          >
+            <LinearGradient
+              colors={CHAIN_GRADIENTS.psi.gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.chainCard, { shadowColor: CHAIN_GRADIENTS.psi.shadowColor }]}
             >
-              <LinearGradient
-                colors={chain.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.chainCard, { shadowColor: chain.shadowColor }]}
-              >
-                <View style={styles.chainCardHeader}>
-                  <View style={styles.chainIconWrapper}>
-                    <ChainIcon chainId={chain.id} size={28} color="#fff" />
-                  </View>
-                  <View style={styles.chainCardBadge}>
-                    <Text style={styles.chainCardBadgeText}>{chain.symbol}</Text>
-                  </View>
+              <View style={styles.chainCardHeader}>
+                <View style={styles.chainIconWrapper}>
+                  <ChainIcon chainId="psi" size={28} color="#fff" />
                 </View>
-                <Text style={styles.chainCardName}>{chain.name}</Text>
-                <View style={styles.chainCardBalance}>
-                  <Text style={styles.chainCardAmount}>{chain.balance}</Text>
-                  <Text style={styles.chainCardSymbol}>{chain.symbol}</Text>
+                <View style={styles.chainCardBadge}>
+                  <Text style={styles.chainCardBadgeText}>USD</Text>
                 </View>
-                <Text style={styles.chainCardUsd}>${chain.usdValue} USD</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
+              </View>
+              <Text style={styles.chainCardName}>PSI Rollup</Text>
+              <View style={styles.chainCardBalance}>
+                <Text style={styles.chainCardAmount}>{displayBalance}</Text>
+                <Text style={styles.chainCardSymbol}>USD</Text>
+              </View>
+              <Text style={styles.chainCardUsd}>${displayBalance} USD</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Dynamic Network Balance Cards - sorted by balance */}
+          {[...(networkBalances || [])]
+            .sort((a, b) => (b.balance || 0) - (a.balance || 0))
+            .map((network) => {
+              const gradientConfig = CHAIN_GRADIENTS[network.id] || { 
+                gradient: [network.color || '#888', network.color ? network.color + 'CC' : '#666'], 
+                shadowColor: network.color || '#888' 
+              };
+              return (
+                <TouchableOpacity 
+                  key={network.id}
+                  activeOpacity={0.9}
+                  onPress={() => navigation.navigate('ChainDetail', { 
+                    chainId: network.id, 
+                    balance: network.formattedBalance, 
+                    usdValue: network.formattedUsdValue || '$0.00'
+                  })}
+                >
+                  <LinearGradient
+                    colors={gradientConfig.gradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.chainCard, { shadowColor: gradientConfig.shadowColor }]}
+                  >
+                    <View style={styles.chainCardHeader}>
+                      <View style={styles.chainIconWrapper}>
+                        <ChainIcon chainId={network.id} size={28} color="#fff" />
+                      </View>
+                      <View style={styles.chainCardBadge}>
+                        <Text style={styles.chainCardBadgeText}>{network.symbol}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.chainCardName}>{network.name}</Text>
+                    <View style={styles.chainCardBalance}>
+                      <Text style={styles.chainCardAmount}>{network.formattedBalance || '0.00'}</Text>
+                      <Text style={styles.chainCardSymbol}>{network.symbol}</Text>
+                    </View>
+                    <Text style={styles.chainCardUsd}>{network.formattedUsdValue || '$0.00'} USD</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              );
+            })}
         </ScrollView>
 
         <View style={styles.quickLinks}>
@@ -331,6 +360,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 24,
     borderBottomWidth: 1,
+  },
+  balanceBreakdown: {
+    margin: 20,
+    marginBottom: 0,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  balanceRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  balanceIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  balanceIconText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  balanceRowLabel: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  balanceRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  balanceRowValue: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  balanceRowChevron: {
+    fontSize: 22,
+    fontWeight: '300',
+  },
+  balanceRowDivider: {
+    height: 1,
+    marginLeft: 68,
   },
   statsCard: {
     margin: 20,

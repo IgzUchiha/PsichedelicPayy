@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
+import { ethers } from 'ethers';
+import { fetchAllNetworkBalances, NETWORKS } from '../config/networks';
 
 const WalletContext = createContext(null);
 
@@ -42,17 +44,26 @@ export function WalletProvider({ children }) {
   const [notes, setNotes] = useState([]);
   const [activeChain, setActiveChain] = useState('eth');
   const [chainBalances, setChainBalances] = useState({});
+  const [networkBalances, setNetworkBalances] = useState(
+    NETWORKS.map(n => ({ ...n, balance: 0, formattedBalance: '0' }))
+  );
+  const [loadingBalances, setLoadingBalances] = useState(false);
 
   useEffect(() => {
     loadWallet();
   }, []);
 
   const loadWallet = async () => {
+    console.log('=== Loading wallet from storage ===');
     try {
       const storedWallet = await SecureStore.getItemAsync(WALLET_STORAGE_KEY);
+      let walletData = null;
       if (storedWallet) {
-        const walletData = JSON.parse(storedWallet);
+        walletData = JSON.parse(storedWallet);
+        console.log('Loaded wallet address:', walletData.address);
         setWallet(walletData);
+      } else {
+        console.log('No wallet found in storage');
       }
       
       const storedChain = await SecureStore.getItemAsync(ACTIVE_CHAIN_KEY);
@@ -66,12 +77,51 @@ export function WalletProvider({ children }) {
         setNotes(notesData);
         calculateBalance(notesData);
       }
+
+      // Fetch network balances if wallet exists
+      if (walletData?.address) {
+        fetchNetworkBalancesForWallet(walletData.address);
+      }
     } catch (error) {
       console.error('Error loading wallet:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchNetworkBalancesForWallet = async (address) => {
+    if (!address) {
+      console.log('No address provided for balance fetch');
+      return;
+    }
+    
+    console.log('=== Fetching network balances ===');
+    console.log('Wallet address:', address);
+    
+    setLoadingBalances(true);
+    try {
+      const balances = await fetchAllNetworkBalances(address);
+      setNetworkBalances(balances);
+      
+      // Log balances for debugging
+      const nonZeroBalances = balances.filter(b => b.balance > 0);
+      if (nonZeroBalances.length > 0) {
+        console.log('Network balances loaded:', nonZeroBalances.map(b => `${b.name}: ${b.formattedBalance} ${b.symbol}`));
+      }
+    } catch (error) {
+      console.error('Error fetching network balances:', error);
+      // Set empty balances with network info on error
+      setNetworkBalances(NETWORKS.map(n => ({ ...n, balance: 0, formattedBalance: '0' })));
+    } finally {
+      setLoadingBalances(false);
+    }
+  };
+
+  const refreshNetworkBalances = useCallback(async () => {
+    if (wallet?.address) {
+      await fetchNetworkBalancesForWallet(wallet.address);
+    }
+  }, [wallet?.address]);
 
   const calculateBalance = (notesList) => {
     const totalMicro = notesList
@@ -131,25 +181,25 @@ export function WalletProvider({ children }) {
   };
 
   const importFromMnemonic = async (mnemonic, name = 'My Wallet') => {
+    console.log('=== Starting mnemonic import ===');
     try {
       const cleanMnemonic = mnemonic.trim().toLowerCase();
       const words = cleanMnemonic.split(/\s+/);
+      
+      console.log('Word count:', words.length);
       
       if (words.length !== 12 && words.length !== 24) {
         throw new Error('Seed phrase must be 12 or 24 words');
       }
       
-      // Derive address from mnemonic (simplified)
-      const hash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        cleanMnemonic
-      );
-      const privateKey = '0x' + hash;
-      const addressHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        privateKey
-      );
-      const address = '0x' + addressHash.slice(0, 40);
+      // Properly derive wallet from mnemonic using ethers
+      console.log('Deriving wallet from mnemonic...');
+      const ethersWallet = ethers.Wallet.fromPhrase(cleanMnemonic);
+      const address = ethersWallet.address;
+      const privateKey = ethersWallet.privateKey;
+      
+      console.log('=== Wallet Imported from Mnemonic ===');
+      console.log('Derived address:', address);
       
       const walletData = {
         name,
@@ -165,14 +215,19 @@ export function WalletProvider({ children }) {
       await SecureStore.setItemAsync(NOTES_STORAGE_KEY, JSON.stringify([]));
       setBalance({ total: '0.00', change: 0, changePercent: 0 });
 
+      // Fetch network balances for imported wallet
+      fetchNetworkBalancesForWallet(address);
+
       return { success: true, address };
     } catch (error) {
-      console.error('Error importing from mnemonic:', error);
+      console.error('=== Error importing from mnemonic ===');
+      console.error('Error:', error.message);
       return { success: false, error: error.message };
     }
   };
 
   const importWallet = async (privateKey, name = 'My Wallet') => {
+    console.log('=== Starting private key import ===');
     try {
       const cleanKey = privateKey.trim();
       
@@ -183,12 +238,12 @@ export function WalletProvider({ children }) {
 
       const formattedKey = cleanKey.startsWith('0x') ? cleanKey : '0x' + cleanKey;
       
-      // Derive address from private key
-      const addressHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        formattedKey
-      );
-      const address = '0x' + addressHash.slice(0, 40);
+      // Properly derive Ethereum address from private key using ethers
+      const ethersWallet = new ethers.Wallet(formattedKey);
+      const address = ethersWallet.address;
+      
+      console.log('=== Wallet Imported ===');
+      console.log('Derived address:', address);
 
       const walletData = {
         name,
@@ -203,9 +258,13 @@ export function WalletProvider({ children }) {
       await SecureStore.setItemAsync(NOTES_STORAGE_KEY, JSON.stringify([]));
       setBalance({ total: '0.00', change: 0, changePercent: 0 });
 
+      // Fetch network balances for imported wallet
+      fetchNetworkBalancesForWallet(address);
+
       return { success: true, address };
     } catch (error) {
-      console.error('Error importing wallet:', error);
+      console.error('=== Error importing wallet ===');
+      console.error('Error:', error.message);
       return { success: false, error: error.message };
     }
   };
@@ -318,11 +377,14 @@ export function WalletProvider({ children }) {
         loading,
         activeChain,
         chainBalances,
+        networkBalances,
+        loadingBalances,
         createWallet,
         importWallet,
         importFromMnemonic,
         removeWallet,
         refreshBalance,
+        refreshNetworkBalances,
         addNote,
         spendNote,
         getUnspentNotes,

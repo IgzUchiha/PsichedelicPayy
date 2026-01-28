@@ -18,6 +18,8 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import ChainDetailScreen from './src/screens/ChainDetailScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import CreateWalletScreen from './src/screens/CreateWalletScreen';
+import CashDetailScreen from './src/screens/CashDetailScreen';
+import CryptoDetailScreen from './src/screens/CryptoDetailScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -254,6 +256,16 @@ function AppContent() {
           <Stack.Screen
             name="ChainDetail"
             component={ChainDetailScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="CashDetail"
+            component={CashDetailScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="CryptoDetail"
+            component={CryptoDetailScreen}
             options={{ presentation: 'card' }}
           />
         </Stack.Navigator>

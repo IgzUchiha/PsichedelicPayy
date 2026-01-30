@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
+import Sparkline from '../components/Sparkline';
 
 // Chain icons and colors
 const CHAIN_CONFIG = {
@@ -109,17 +110,31 @@ export default function CryptoDetailScreen({ navigation }) {
                     </View>
                     <View style={styles.itemInfo}>
                       <Text style={[styles.itemName, { color: theme.textPrimary }]}>{network.name}</Text>
+                      <Text style={[styles.itemSymbol, { color: theme.textSecondary }]}>{network.symbol}</Text>
                     </View>
                   </View>
+                  
+                  {/* Sparkline Chart */}
+                  <View style={styles.sparklineContainer}>
+                    {network.sparkline && network.sparkline.length > 0 && (
+                      <Sparkline 
+                        data={network.sparkline.slice(-24)} 
+                        width={60} 
+                        height={24}
+                        color={(network.priceChange24h || 0) >= 0 ? '#00C805' : '#FF3B30'}
+                      />
+                    )}
+                  </View>
+                  
                   <View style={styles.itemRight}>
                     <Text style={[styles.itemValue, { color: theme.textPrimary }]}>
                       {network.formattedUsdValue || '$0.00'}
                     </Text>
                     <Text style={[
-                      styles.itemSubvalue, 
-                      { color: hasBalance ? theme.textPrimary : theme.textSecondary }
+                      styles.itemChange, 
+                      { color: (network.priceChange24h || 0) >= 0 ? '#00C805' : '#FF3B30' }
                     ]}>
-                      {network.formattedBalance} {network.symbol}
+                      {(network.priceChange24h || 0) >= 0 ? '↗' : '↘'} {Math.abs(network.priceChange24h || 0).toFixed(2)}%
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -246,12 +261,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  itemSymbol: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  sparklineContainer: {
+    width: 70,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   itemRight: {
     alignItems: 'flex-end',
+    minWidth: 70,
   },
   itemValue: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  itemChange: {
+    fontSize: 13,
+    marginTop: 2,
   },
   itemSubvalue: {
     fontSize: 13,

@@ -22,7 +22,7 @@ export const NETWORKS = [
     icon: '🔵',
     color: '#28A0F0',
     decimals: 18,
-    coingeckoId: 'ethereum',  // Uses ETH price for native balance
+    coingeckoId: 'arbitrum',  // ARB token price
   },
   {
     id: 'optimism',
@@ -34,7 +34,7 @@ export const NETWORKS = [
     icon: '🔴',
     color: '#FF0420',
     decimals: 18,
-    coingeckoId: 'ethereum',  // Uses ETH price for native balance
+    coingeckoId: 'optimism',  // OP token price
   },
   {
     id: 'polygon',
@@ -46,19 +46,19 @@ export const NETWORKS = [
     icon: '🟣',
     color: '#8247E5',
     decimals: 18,
-    coingeckoId: 'matic-network',
+    coingeckoId: 'polygon-ecosystem-token',
   },
   {
     id: 'base',
     name: 'Base',
-    symbol: 'BASE',
+    symbol: 'ETH',  // Base uses ETH as native token
     chainId: 8453,
     rpcUrl: 'https://mainnet.base.org',
     explorerUrl: 'https://basescan.org',
     icon: '🔷',
     color: '#0052FF',
     decimals: 18,
-    coingeckoId: 'ethereum',  // Uses ETH price for native balance
+    coingeckoId: 'ethereum',  // Base uses ETH
   },
   {
     id: 'bsc',
@@ -91,7 +91,12 @@ let priceCache = {};
 let priceCacheTime = 0;
 const PRICE_CACHE_DURATION = 60000; // 1 minute
 
-// Fetch crypto prices from CoinGecko
+// Cache for price history (sparklines)
+let priceHistoryCache = {};
+let priceHistoryCacheTime = 0;
+const HISTORY_CACHE_DURATION = 300000; // 5 minutes
+
+// Fetch crypto prices from CoinGecko with 24h change
 export async function fetchCryptoPrices() {
   // Return cached prices if still valid
   if (Date.now() - priceCacheTime < PRICE_CACHE_DURATION && Object.keys(priceCache).length > 0) {
@@ -101,7 +106,7 @@ export async function fetchCryptoPrices() {
   try {
     const coinIds = [...new Set(NETWORKS.map(n => n.coingeckoId))].join(',');
     const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`,
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd&include_24hr_change=true`,
       { headers: { 'Accept': 'application/json' } }
     );
     
@@ -119,6 +124,76 @@ export async function fetchCryptoPrices() {
   } catch (error) {
     console.error('Error fetching crypto prices:', error.message);
     return priceCache; // Return cached prices on error
+  }
+}
+
+// Fetch sparkline data for all coins (7 day history)
+export async function fetchSparklineData() {
+  // Return cached data if still valid
+  if (Date.now() - priceHistoryCacheTime < HISTORY_CACHE_DURATION && Object.keys(priceHistoryCache).length > 0) {
+    return priceHistoryCache;
+  }
+
+  try {
+    const coinIds = [...new Set(NETWORKS.map(n => n.coingeckoId))].join(',');
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${coinIds}&sparkline=true&price_change_percentage=24h`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) {
+      console.warn('Sparkline fetch failed:', response.status);
+      return priceHistoryCache;
+    }
+    
+    const data = await response.json();
+    // Convert array to object keyed by id
+    const result = {};
+    data.forEach(coin => {
+      result[coin.id] = {
+        currentPrice: coin.current_price,
+        priceChange24h: coin.price_change_24h,
+        priceChangePercentage24h: coin.price_change_percentage_24h,
+        sparkline: coin.sparkline_in_7d?.price || [],
+        high24h: coin.high_24h,
+        low24h: coin.low_24h,
+        marketCap: coin.market_cap,
+        volume24h: coin.total_volume,
+      };
+    });
+    
+    priceHistoryCache = result;
+    priceHistoryCacheTime = Date.now();
+    
+    return result;
+  } catch (error) {
+    console.error('Error fetching sparkline data:', error.message);
+    return priceHistoryCache;
+  }
+}
+
+// Fetch detailed price history for a specific coin
+export async function fetchPriceHistory(coingeckoId, days = 1) {
+  try {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${coingeckoId}/market_chart?vs_currency=usd&days=${days}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    
+    if (!response.ok) {
+      console.warn('Price history fetch failed:', response.status);
+      return null;
+    }
+    
+    const data = await response.json();
+    return {
+      prices: data.prices, // Array of [timestamp, price]
+      marketCaps: data.market_caps,
+      volumes: data.total_volumes,
+    };
+  } catch (error) {
+    console.error('Error fetching price history:', error.message);
+    return null;
   }
 }
 
@@ -177,11 +252,12 @@ export async function fetchNetworkBalance(network, address) {
   }
 }
 
-// Fetch balances from all networks with USD values
+// Fetch balances from all networks with USD values and sparklines
 export async function fetchAllNetworkBalances(address) {
-  // Fetch prices in parallel with balances
-  const [prices, balanceResults] = await Promise.all([
+  // Fetch prices, sparklines, and balances in parallel
+  const [prices, sparklineData, balanceResults] = await Promise.all([
     fetchCryptoPrices(),
+    fetchSparklineData(),
     Promise.all(
       NETWORKS.map(async (network) => {
         const balance = await fetchNetworkBalance(network, address);
@@ -191,7 +267,10 @@ export async function fetchAllNetworkBalances(address) {
   ]);
 
   const balances = balanceResults.map(({ network, balance }) => {
-    const price = prices[network.coingeckoId]?.usd || 0;
+    const priceData = prices[network.coingeckoId] || {};
+    const sparkline = sparklineData[network.coingeckoId] || {};
+    const price = priceData.usd || sparkline.currentPrice || 0;
+    const priceChange24h = priceData.usd_24h_change || sparkline.priceChangePercentage24h || 0;
     const usdValue = balance * price;
     
     return {
@@ -199,8 +278,14 @@ export async function fetchAllNetworkBalances(address) {
       balance,
       formattedBalance: formatBalance(balance),
       price,
+      priceChange24h,
       usdValue,
       formattedUsdValue: formatUsdValue(usdValue),
+      sparkline: sparkline.sparkline || [],
+      high24h: sparkline.high24h,
+      low24h: sparkline.low24h,
+      marketCap: sparkline.marketCap,
+      volume24h: sparkline.volume24h,
     };
   });
   

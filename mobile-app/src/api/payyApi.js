@@ -7,13 +7,32 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8080';
 // For Android emulator, use: http://10.0.2.2:8080
 // For physical device, use your computer's IP: http://192.168.1.X:8080
 
+// Track if backend is available to avoid repeated timeout waits
+let backendAvailable = null;
+let lastBackendCheck = 0;
+const BACKEND_CHECK_INTERVAL = 30000; // Check every 30 seconds
+
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 3000, // Reduced from 10s to 3s for faster failure
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Quick check if we should skip API calls (backend known to be down)
+const shouldSkipCall = () => {
+  if (backendAvailable === false && Date.now() - lastBackendCheck < BACKEND_CHECK_INTERVAL) {
+    return true;
+  }
+  return false;
+};
+
+// Update backend status
+const updateBackendStatus = (isAvailable) => {
+  backendAvailable = isAvailable;
+  lastBackendCheck = Date.now();
+};
 
 export const payyApi = {
   // Get node info
@@ -31,44 +50,51 @@ export const payyApi = {
   getHealth: async () => {
     try {
       const response = await api.get('/v0/health');
+      updateBackendStatus(true);
       return response.data;
     } catch (error) {
-      console.error('Error fetching health:', error);
+      updateBackendStatus(false);
       throw error;
     }
   },
 
   // Get current block height
   getHeight: async () => {
+    if (shouldSkipCall()) return null;
     try {
       const response = await api.get('/v0/height');
+      updateBackendStatus(true);
       return response.data;
     } catch (error) {
-      console.error('Error fetching height:', error);
+      updateBackendStatus(false);
       throw error;
     }
   },
 
   // Get stats
   getStats: async () => {
+    if (shouldSkipCall()) return null;
     try {
       const response = await api.get('/v0/stats');
+      updateBackendStatus(true);
       return response.data;
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      updateBackendStatus(false);
       throw error;
     }
   },
 
   // List blocks
   listBlocks: async (limit = 10, offset = 0) => {
+    if (shouldSkipCall()) return [];
     try {
       const response = await api.get('/v0/blocks', {
         params: { limit, offset },
       });
+      updateBackendStatus(true);
       return response.data;
     } catch (error) {
-      console.error('Error fetching blocks:', error);
+      updateBackendStatus(false);
       throw error;
     }
   },
@@ -86,13 +112,15 @@ export const payyApi = {
 
   // List transactions
   listTransactions: async (limit = 10, offset = 0) => {
+    if (shouldSkipCall()) return [];
     try {
       const response = await api.get('/v0/transactions', {
         params: { limit, offset },
       });
+      updateBackendStatus(true);
       return response.data;
     } catch (error) {
-      console.error('Error fetching transactions:', error);
+      updateBackendStatus(false);
       throw error;
     }
   },

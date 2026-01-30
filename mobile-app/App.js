@@ -20,6 +20,9 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import CreateWalletScreen from './src/screens/CreateWalletScreen';
 import CashDetailScreen from './src/screens/CashDetailScreen';
 import CryptoDetailScreen from './src/screens/CryptoDetailScreen';
+import BuyScreen from './src/screens/BuyScreen';
+import SellScreen from './src/screens/SellScreen';
+import ConvertScreen from './src/screens/ConvertScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -266,6 +269,21 @@ function AppContent() {
           <Stack.Screen
             name="CryptoDetail"
             component={CryptoDetailScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="Buy"
+            component={BuyScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="Sell"
+            component={SellScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="Convert"
+            component={ConvertScreen}
             options={{ presentation: 'card' }}
           />
         </Stack.Navigator>

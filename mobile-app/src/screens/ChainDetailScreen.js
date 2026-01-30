@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import PriceChart from '../components/PriceChart';
+import BuySellSheet from '../components/BuySellSheet';
 import { fetchPriceHistory } from '../config/networks';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -46,6 +47,7 @@ export default function ChainDetailScreen({ route, navigation }) {
   const [priceHistory, setPriceHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPrice, setCurrentPrice] = useState(0);
+  const [showBuySellSheet, setShowBuySellSheet] = useState(false);
   const [priceChange, setPriceChange] = useState(0);
   const [priceChangePercent, setPriceChangePercent] = useState(0);
 
@@ -276,11 +278,39 @@ export default function ChainDetailScreen({ route, navigation }) {
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.footerButton, styles.footerButtonPrimary]}
-          onPress={() => navigation.navigate('Receive')}
+          onPress={() => setShowBuySellSheet(true)}
         >
           <Text style={[styles.footerButtonText, { color: '#fff' }]}>Buy & sell</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Buy/Sell Sheet */}
+      <BuySellSheet
+        visible={showBuySellSheet}
+        onClose={() => setShowBuySellSheet(false)}
+        onBuy={() => {
+          setShowBuySellSheet(false);
+          navigation.navigate('Buy', { 
+            chainId, 
+            chainName: chain.name, 
+            chainSymbol: chain.symbol 
+          });
+        }}
+        onSell={() => {
+          setShowBuySellSheet(false);
+          navigation.navigate('Sell', { 
+            chainId, 
+            chainName: chain.name, 
+            chainSymbol: chain.symbol 
+          });
+        }}
+        onConvert={() => {
+          setShowBuySellSheet(false);
+          navigation.navigate('Convert', { 
+            chainId 
+          });
+        }}
+      />
     </View>
   );
 }

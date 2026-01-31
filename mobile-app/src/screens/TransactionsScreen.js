@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import TransactionItem from '../components/TransactionItem';
 import payyApi from '../api/payyApi';
+import { useWallet } from '../context/WalletContext';
+import { useTheme } from '../context/ThemeContext';
 
 // Skeleton loader component
 function SkeletonLoader({ width, height, style }) {
@@ -50,14 +52,17 @@ function TransactionSkeleton() {
   );
 }
 
-export default function TransactionsScreen() {
+export default function TransactionsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [loading, setLoading] = useState(true);
+  const { theme } = useTheme();
+  const { activities } = useWallet();
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [filter, setFilter] = useState('all');
 
   const fetchTransactions = async () => {
+    setRefreshing(true);
     try {
       const response = await payyApi.listTransactions(20, 0);
       if (Array.isArray(response)) {
@@ -76,8 +81,42 @@ export default function TransactionsScreen() {
     }
   };
 
+  // Format activity for display
+  const formatActivity = (activity) => {
+    const date = new Date(activity.date);
+    return {
+      id: activity.id,
+      type: activity.type,
+      status: activity.status,
+      amount: activity.amount,
+      formattedDate: date.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      formattedTime: date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      }),
+      ...activity,
+    };
+  };
+
+  const formattedActivities = (activities || []).map(formatActivity);
+
+  // Filter activities
+  const filteredActivities = formattedActivities.filter(a => {
+    if (filter === 'all') return true;
+    if (filter === 'sent') return a.type === 'send';
+    if (filter === 'received') return a.type === 'receive';
+    return true;
+  });
+
   useEffect(() => {
-    fetchTransactions();
+    // Only fetch API transactions if needed
+    // fetchTransactions();
   }, []);
 
   const onRefresh = () => {
@@ -131,17 +170,56 @@ export default function TransactionsScreen() {
               <TransactionSkeleton key={i} />
             ))}
           </View>
-        ) : filteredTransactions.length > 0 ? (
+        ) : filteredActivities.length > 0 ? (
           <View style={styles.transactionsList}>
-            {filteredTransactions.map((tx, index) => (
-              <TransactionItem
-                key={tx.hash || index}
-                type={tx.type || 'transfer'}
-                title={tx.type === 'send' ? 'Payment Sent' : tx.type === 'receive' ? 'Payment Received' : 'Transaction'}
-                subtitle={tx.to ? `To ${tx.to.slice(0, 6)}...${tx.to.slice(-4)}` : (tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleDateString() : tx.hash ? `${tx.hash.slice(0, 10)}...` : 'Recent')}
-                amount={tx.amount || '0.00'}
-                positive={tx.type === 'receive'}
-              />
+            {filteredActivities.map((activity) => (
+              <TouchableOpacity 
+                key={activity.id}
+                style={styles.activityItem}
+                onPress={() => {
+                  if (activity.paymentLink) {
+                    navigation.navigate('LinkCreated', {
+                      amount: Math.abs(activity.amount),
+                      netAmount: activity.netAmount,
+                      link: activity.paymentLink,
+                      paymentId: activity.paymentId,
+                      note: activity.note,
+                    });
+                  }
+                }}
+              >
+                <View style={styles.activityLeft}>
+                  <View style={[styles.activityIcon, { 
+                    backgroundColor: activity.type === 'sell' ? '#00C805' : 
+                      activity.type === 'buy' ? '#2196F3' : 
+                      activity.type === 'send' ? '#FF9500' : '#8E8E93'
+                  }]}>
+                    <Text style={styles.activityIconText}>
+                      {activity.type === 'sell' ? '↓' : activity.type === 'buy' ? '↑' : activity.type === 'send' ? '→' : '↔'}
+                    </Text>
+                  </View>
+                  <View style={styles.activityInfo}>
+                    <Text style={[styles.activityTitle, { color: theme.textPrimary }]}>
+                      {activity.type === 'sell' ? 'Sold Crypto' : 
+                       activity.type === 'buy' ? 'Bought Crypto' : 
+                       activity.type === 'send' ? 'Payment Link' : 'Transaction'}
+                    </Text>
+                    <Text style={[styles.activitySubtitle, { color: theme.textSecondary }]}>
+                      {activity.formattedDate} • {activity.status}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.activityRight}>
+                  <Text style={[styles.activityAmount, { 
+                    color: activity.amount >= 0 ? '#00C805' : theme.textPrimary 
+                  }]}>
+                    {activity.amount >= 0 ? '+' : ''}${Math.abs(activity.amount).toFixed(2)}
+                  </Text>
+                  <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
+                    {activity.formattedTime}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
         ) : (
@@ -205,6 +283,54 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 16,
     overflow: 'hidden',
+  },
+  activityItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  activityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  activityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  activityIconText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  activityInfo: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activitySubtitle: {
+    fontSize: 13,
+  },
+  activityRight: {
+    alignItems: 'flex-end',
+  },
+  activityAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  activityTime: {
+    fontSize: 13,
   },
   skeletonItem: {
     flexDirection: 'row',

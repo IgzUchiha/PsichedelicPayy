@@ -9,6 +9,8 @@ const WalletContext = createContext(null);
 const WALLET_STORAGE_KEY = 'payy_wallet';
 const NOTES_STORAGE_KEY = 'payy_notes';
 const ACTIVE_CHAIN_KEY = 'payy_active_chain';
+const CASH_BALANCE_KEY = 'payy_cash_balance';
+const ACTIVITY_KEY = 'payy_activity';
 
 // Chain configuration
 export const CHAINS = {
@@ -48,10 +50,96 @@ export function WalletProvider({ children }) {
     NETWORKS.map(n => ({ ...n, balance: 0, formattedBalance: '0' }))
   );
   const [loadingBalances, setLoadingBalances] = useState(false);
+  const [cashBalance, setCashBalance] = useState(0);
+  const [activities, setActivities] = useState([]);
 
   useEffect(() => {
     loadWallet();
+    loadCashBalance();
+    loadActivities();
   }, []);
+
+  const loadCashBalance = async () => {
+    try {
+      const stored = await SecureStore.getItemAsync(CASH_BALANCE_KEY);
+      if (stored) {
+        setCashBalance(parseFloat(stored) || 0);
+      }
+    } catch (error) {
+      console.error('Error loading cash balance:', error);
+    }
+  };
+
+  const updateCashBalance = async (newBalance) => {
+    try {
+      setCashBalance(newBalance);
+      await SecureStore.setItemAsync(CASH_BALANCE_KEY, newBalance.toString());
+      console.log('[CASH] Updated balance:', newBalance);
+    } catch (error) {
+      console.error('Error saving cash balance:', error);
+    }
+  };
+
+  const addToCashBalance = async (amount) => {
+    const newBalance = cashBalance + amount;
+    await updateCashBalance(newBalance);
+    return newBalance;
+  };
+
+  const subtractFromCashBalance = async (amount) => {
+    const newBalance = Math.max(0, cashBalance - amount);
+    await updateCashBalance(newBalance);
+    return newBalance;
+  };
+
+  const loadActivities = async () => {
+    try {
+      const stored = await SecureStore.getItemAsync(ACTIVITY_KEY);
+      if (stored) {
+        setActivities(JSON.parse(stored) || []);
+      }
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    }
+  };
+
+  const addActivity = async (activity) => {
+    try {
+      const newActivity = {
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        date: new Date().toISOString(),
+        ...activity,
+      };
+      const updatedActivities = [newActivity, ...activities];
+      setActivities(updatedActivities);
+      await SecureStore.setItemAsync(ACTIVITY_KEY, JSON.stringify(updatedActivities));
+      console.log('[ACTIVITY] Added:', newActivity);
+      return newActivity;
+    } catch (error) {
+      console.error('Error saving activity:', error);
+    }
+  };
+
+  const updateActivityStatus = async (activityId, status) => {
+    try {
+      const updatedActivities = activities.map(a => 
+        a.id === activityId ? { ...a, status } : a
+      );
+      setActivities(updatedActivities);
+      await SecureStore.setItemAsync(ACTIVITY_KEY, JSON.stringify(updatedActivities));
+    } catch (error) {
+      console.error('Error updating activity:', error);
+    }
+  };
+
+  const clearActivities = async () => {
+    try {
+      setActivities([]);
+      await SecureStore.deleteItemAsync(ACTIVITY_KEY);
+    } catch (error) {
+      console.error('Error clearing activities:', error);
+    }
+  };
 
   const loadWallet = async () => {
     console.log('=== Loading wallet from storage ===');
@@ -379,6 +467,8 @@ export function WalletProvider({ children }) {
         chainBalances,
         networkBalances,
         loadingBalances,
+        cashBalance,
+        activities,
         createWallet,
         importWallet,
         importFromMnemonic,
@@ -394,6 +484,12 @@ export function WalletProvider({ children }) {
         switchChain,
         getChainAddress,
         getAllAddresses,
+        addToCashBalance,
+        subtractFromCashBalance,
+        updateCashBalance,
+        addActivity,
+        updateActivityStatus,
+        clearActivities,
         supportedChains: SUPPORTED_CHAINS,
         chains: CHAINS,
         hasWallet: !!wallet,

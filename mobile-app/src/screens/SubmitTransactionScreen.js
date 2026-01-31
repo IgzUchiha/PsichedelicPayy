@@ -10,20 +10,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import payyApi from '../api/payyApi';
 import { useWallet } from '../context/WalletContext';
+import { useTheme } from '../context/ThemeContext';
+import { processTransactionWithFee } from '../config/fees';
 
 export default function SubmitTransactionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { wallet, getUnspentNotes, addNote, spendNote, markNotesPending, unmarkNotesPending } = useWallet();
+  const { theme } = useTheme();
+  const { wallet, cashBalance, subtractFromCashBalance, addActivity, getUnspentNotes, addNote, spendNote, markNotesPending, unmarkNotesPending } = useWallet();
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
   const [note, setNote] = useState('');
+  const [paymentLink, setPaymentLink] = useState(null);
 
   // Convert dollar amount to micro units (6 decimals)
   const dollarToMicro = (dollars) => {
@@ -59,6 +64,67 @@ export default function SubmitTransactionScreen({ navigation }) {
     return { selected, total };
   };
 
+  // Create ZK payment link from cash balance
+  const handleCreatePaymentLink = async () => {
+    const amountNum = parseFloat(amount);
+    
+    if (!amount || amountNum <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount');
+      return;
+    }
+
+    if (amountNum > cashBalance) {
+      Alert.alert(
+        'Insufficient Cash Balance',
+        `You need $${amountNum.toFixed(2)} but only have $${cashBalance.toFixed(2)} in cash.`
+      );
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Process fee silently
+      const result = await processTransactionWithFee({
+        amount: amountNum,
+        type: 'SEND',
+      });
+
+      // Deduct from cash balance
+      await subtractFromCashBalance(amountNum);
+
+      // Generate payment link
+      const paymentId = Math.random().toString(36).substring(2, 15);
+      const link = `https://pay.psi.money/claim/${paymentId}?amount=${Math.round(result.netAmount * 100)}`;
+      setPaymentLink(link);
+
+      // Add to activity
+      await addActivity({
+        type: 'send',
+        status: 'Link ready',
+        amount: -amountNum,
+        netAmount: result.netAmount,
+        recipient: recipient || 'Payment Link',
+        note: note,
+        paymentLink: link,
+        paymentId,
+      });
+
+      // Navigate to link created screen
+      navigation.navigate('LinkCreated', {
+        amount: amountNum,
+        netAmount: result.netAmount,
+        link,
+        paymentId,
+        note,
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create payment link. Please try again.');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     const amountMicro = dollarToMicro(amount);
 
@@ -67,9 +133,9 @@ export default function SubmitTransactionScreen({ navigation }) {
       return;
     }
 
+    // If no recipient, create a payment link instead
     if (!recipient.trim()) {
-      Alert.alert('Missing Recipient', 'Please enter a recipient address');
-      return;
+      return handleCreatePaymentLink();
     }
 
     if (!wallet?.privateKey) {
@@ -77,21 +143,18 @@ export default function SubmitTransactionScreen({ navigation }) {
       return;
     }
 
-    // Check if we have enough balance
-    const { selected: inputNotes, total: inputTotal } = selectNotesForAmount(amountMicro);
-
-    if (inputTotal < amountMicro) {
+    // Check cash balance first
+    const amountNum = parseFloat(amount);
+    if (amountNum > cashBalance) {
       Alert.alert(
         'Insufficient Balance',
-        `You need $${(amountMicro / 1_000_000).toFixed(2)} but only have $${(inputTotal / 1_000_000).toFixed(2)} available.`
+        `You need $${amountNum.toFixed(2)} but only have $${cashBalance.toFixed(2)} available.`
       );
       return;
     }
 
-    if (inputNotes.length === 0) {
-      Alert.alert('No Notes', 'You don\'t have any spendable notes. Use the Faucet to get test tokens.');
-      return;
-    }
+    // For direct sends, also use cash balance
+    return handleCreatePaymentLink();
 
     setLoading(true);
     const pendingCommitments = inputNotes.slice(0, 2).map(n => n.commitment);

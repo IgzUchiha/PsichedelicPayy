@@ -14,9 +14,9 @@ import { useWallet } from '../context/WalletContext';
 export default function CashDetailScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { balance: walletBalance } = useWallet();
+  const { balance: walletBalance, cashBalance } = useWallet();
 
-  const psiBalance = walletBalance?.total || '0.00';
+  const psiBalance = (cashBalance || 0).toFixed(2);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>

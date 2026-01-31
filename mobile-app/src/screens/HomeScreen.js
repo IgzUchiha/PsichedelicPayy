@@ -25,7 +25,7 @@ const CHAIN_GRADIENTS = {
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { wallet, balance: walletBalance, hasWallet, refreshBalance, networkBalances, refreshNetworkBalances, loadingBalances } = useWallet();
+  const { wallet, balance: walletBalance, hasWallet, refreshBalance, networkBalances, refreshNetworkBalances, loadingBalances, cashBalance } = useWallet();
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState(null);
   const [height, setHeight] = useState(null);
@@ -79,8 +79,14 @@ export default function HomeScreen({ navigation }) {
   const change = walletBalance?.change || 0;
   const changePercent = walletBalance?.changePercent || 0;
 
+  // Format cash balance
+  const formattedCashBalance = (cashBalance || 0).toFixed(2);
+
   // Calculate total crypto balance in USD from all networks
   const totalCryptoUsd = networkBalances?.reduce((sum, n) => sum + (n.usdValue || 0), 0) || 0;
+  
+  // Total balance = cash + crypto
+  const totalBalance = (cashBalance || 0) + totalCryptoUsd;
   const formattedCryptoUsd = totalCryptoUsd < 0.01 && totalCryptoUsd > 0 
     ? '<$0.01' 
     : '$' + totalCryptoUsd.toFixed(2);
@@ -112,7 +118,7 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <BalanceCard 
-          balance={displayBalance}
+          balance={totalBalance.toFixed(2)}
           change={change}
           changePercent={changePercent}
           positive={change >= 0}
@@ -150,7 +156,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={[styles.balanceRowLabel, { color: theme.textPrimary }]}>Cash</Text>
             </View>
             <View style={styles.balanceRowRight}>
-              <Text style={[styles.balanceRowValue, { color: theme.textPrimary }]}>${displayBalance}</Text>
+              <Text style={[styles.balanceRowValue, { color: theme.textPrimary }]}>${formattedCashBalance}</Text>
               <Text style={[styles.balanceRowChevron, { color: theme.textSecondary }]}>›</Text>
             </View>
           </TouchableOpacity>
@@ -248,10 +254,10 @@ export default function HomeScreen({ navigation }) {
               </View>
               <Text style={styles.chainCardName}>PSI Rollup</Text>
               <View style={styles.chainCardBalance}>
-                <Text style={styles.chainCardAmount}>{displayBalance}</Text>
+                <Text style={styles.chainCardAmount}>{formattedCashBalance}</Text>
                 <Text style={styles.chainCardSymbol}>USD</Text>
               </View>
-              <Text style={styles.chainCardUsd}>${displayBalance} USD</Text>
+              <Text style={styles.chainCardUsd}>${formattedCashBalance} USD</Text>
             </LinearGradient>
           </TouchableOpacity>
 

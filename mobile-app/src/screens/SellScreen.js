@@ -5,11 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import ChainIcon from '../components/ChainIcon';
+import { processTransactionWithFee } from '../config/fees';
 
 const RECEIVE_OPTIONS = [
   { id: 'usd', name: 'US Dollar', subtitle: 'Cash (USD)', icon: '$', color: '#00C805' },
@@ -21,11 +24,12 @@ export default function SellScreen({ route, navigation }) {
   const { chainId = 'ethereum', chainName = 'Ethereum', chainSymbol = 'ETH' } = route.params || {};
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { networkBalances = [] } = useWallet();
+  const { networkBalances = [], addToCashBalance, addActivity } = useWallet();
   
   const [amount, setAmount] = useState('0');
   const [selectedReceive, setSelectedReceive] = useState(RECEIVE_OPTIONS[0]);
   const [showReceivePicker, setShowReceivePicker] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   // Get user's balance for this chain
   const chainBalance = networkBalances.find(b => b.id === chainId);
@@ -201,20 +205,86 @@ export default function SellScreen({ route, navigation }) {
         <TouchableOpacity 
           style={[
             styles.reviewButton,
-            parseFloat(amount) > 0 ? styles.reviewButtonActive : { backgroundColor: theme.cardBackground }
+            parseFloat(amount) > 0 && !processing ? styles.reviewButtonActive : { backgroundColor: theme.cardBackground }
           ]}
-          disabled={parseFloat(amount) <= 0}
+          disabled={parseFloat(amount) <= 0 || processing}
+          onPress={handleReviewOrder}
         >
-          <Text style={[
-            styles.reviewButtonText,
-            { color: parseFloat(amount) > 0 ? '#fff' : theme.textSecondary }
-          ]}>
-            Review order
-          </Text>
+          {processing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[
+              styles.reviewButtonText,
+              { color: parseFloat(amount) > 0 ? '#fff' : theme.textSecondary }
+            ]}>
+              Review order
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  async function handleReviewOrder() {
+    const amountNum = parseFloat(amount);
+    if (amountNum <= 0) return;
+    if (amountNum > availableUsd) {
+      Alert.alert('Insufficient Balance', `You only have $${availableUsd.toFixed(2)} available to sell.`);
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Sale',
+      `Sell $${amountNum.toFixed(2)} of ${chainName} for ${selectedReceive.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Confirm', 
+          onPress: async () => {
+            setProcessing(true);
+            try {
+              // Process with fee (fee is handled silently)
+              const result = await processTransactionWithFee({
+                amount: amountNum,
+                type: 'SELL',
+                fromChain: chainId,
+                toAsset: selectedReceive.id,
+              });
+
+              if (result.success) {
+                // Add the net amount to cash balance
+                if (selectedReceive.id === 'usd') {
+                  await addToCashBalance(result.netAmount);
+                }
+                
+                // Add to activity
+                await addActivity({
+                  type: 'sell',
+                  status: 'Completed',
+                  amount: result.netAmount,
+                  soldAmount: amountNum,
+                  chainId,
+                  chainName,
+                  chainSymbol,
+                  receivedIn: selectedReceive.name,
+                });
+
+                Alert.alert(
+                  'Sale Complete!',
+                  `You sold $${amountNum.toFixed(2)} of ${chainName}.\n\n$${result.netAmount.toFixed(2)} has been added to your ${selectedReceive.name} balance.`,
+                  [{ text: 'Done', onPress: () => navigation.goBack() }]
+                );
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to process sale. Please try again.');
+            } finally {
+              setProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  }
 }
 
 const styles = StyleSheet.create({

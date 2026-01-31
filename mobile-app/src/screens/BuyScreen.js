@@ -5,10 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { useWallet } from '../context/WalletContext';
 import ChainIcon from '../components/ChainIcon';
+import { processTransactionWithFee } from '../config/fees';
 
 const PAYMENT_OPTIONS = [
   { id: 'cash', name: 'Cash', subtitle: 'PSI Rollup Balance', icon: '$', color: '#00C805', limit: 10000 },
@@ -20,10 +24,12 @@ export default function BuyScreen({ route, navigation }) {
   const { chainId = 'ethereum', chainName = 'Ethereum', chainSymbol = 'ETH' } = route.params || {};
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
+  const { cashBalance, subtractFromCashBalance, addActivity } = useWallet();
   
   const [amount, setAmount] = useState('0');
   const [selectedPayment, setSelectedPayment] = useState(PAYMENT_OPTIONS[0]);
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   const handleNumberPress = (num) => {
     if (num === '.' && amount.includes('.')) return;
@@ -183,20 +189,95 @@ export default function BuyScreen({ route, navigation }) {
         <TouchableOpacity 
           style={[
             styles.reviewButton,
-            parseFloat(amount) > 0 ? styles.reviewButtonActive : { backgroundColor: theme.cardBackground }
+            parseFloat(amount) > 0 && !processing ? styles.reviewButtonActive : { backgroundColor: theme.cardBackground }
           ]}
-          disabled={parseFloat(amount) <= 0}
+          disabled={parseFloat(amount) <= 0 || processing}
+          onPress={handleReviewOrder}
         >
-          <Text style={[
-            styles.reviewButtonText,
-            { color: parseFloat(amount) > 0 ? '#fff' : theme.textSecondary }
-          ]}>
-            Review order
-          </Text>
+          {processing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[
+              styles.reviewButtonText,
+              { color: parseFloat(amount) > 0 ? '#fff' : theme.textSecondary }
+            ]}>
+              Review order
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  async function handleReviewOrder() {
+    const amountNum = parseFloat(amount);
+    if (amountNum <= 0) return;
+    
+    // Check if using cash and have enough balance
+    if (selectedPayment.id === 'cash' && amountNum > cashBalance) {
+      Alert.alert('Insufficient Cash', `You only have $${cashBalance.toFixed(2)} in cash.`);
+      return;
+    }
+
+    if (amountNum > selectedPayment.limit) {
+      Alert.alert('Limit Exceeded', `Maximum purchase limit is $${selectedPayment.limit.toLocaleString()}.`);
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Purchase',
+      `Buy $${amountNum.toFixed(2)} of ${chainName} using ${selectedPayment.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Confirm', 
+          onPress: async () => {
+            setProcessing(true);
+            try {
+              // Process with fee (fee is handled silently)
+              const result = await processTransactionWithFee({
+                amount: amountNum,
+                type: 'BUY',
+                fromAsset: selectedPayment.id,
+                toChain: chainId,
+              });
+
+              if (result.success) {
+                // Deduct from cash balance if using cash
+                if (selectedPayment.id === 'cash') {
+                  await subtractFromCashBalance(amountNum);
+                }
+
+                const cryptoAmount = (result.netAmount / 2700).toFixed(6); // Mock conversion
+                
+                // Add to activity
+                await addActivity({
+                  type: 'buy',
+                  status: 'Completed',
+                  amount: -amountNum,
+                  cryptoAmount,
+                  cryptoSymbol: chainSymbol,
+                  chainId,
+                  chainName,
+                  paymentMethod: selectedPayment.name,
+                });
+
+                Alert.alert(
+                  'Purchase Complete!',
+                  `You bought ${cryptoAmount} ${chainSymbol} for $${amountNum.toFixed(2)}.\n\nYour crypto has been added to your wallet.`,
+                  [{ text: 'Done', onPress: () => navigation.goBack() }]
+                );
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to process purchase. Please try again.');
+            } finally {
+              setProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  }
 }
 
 const styles = StyleSheet.create({

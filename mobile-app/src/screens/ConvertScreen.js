@@ -6,11 +6,14 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
 import ChainIcon from '../components/ChainIcon';
+import { processTransactionWithFee } from '../config/fees';
 
 const AVAILABLE_CHAINS = [
   { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', color: '#627EEA' },
@@ -33,6 +36,7 @@ export default function ConvertScreen({ route, navigation }) {
   const [toChain, setToChain] = useState(AVAILABLE_CHAINS.find(c => c.id !== chainId) || AVAILABLE_CHAINS[1]);
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   // Get user's balance for the from chain
   const chainBalance = networkBalances.find(b => b.id === fromChain.id);
@@ -248,22 +252,67 @@ export default function ConvertScreen({ route, navigation }) {
         <TouchableOpacity 
           style={[
             styles.reviewButton,
-            fromAmountNum > 0 && fromAmountNum <= availableBalance 
+            fromAmountNum > 0 && fromAmountNum <= availableBalance && !processing
               ? styles.reviewButtonActive 
               : { backgroundColor: theme.cardBackground }
           ]}
-          disabled={fromAmountNum <= 0 || fromAmountNum > availableBalance}
+          disabled={fromAmountNum <= 0 || fromAmountNum > availableBalance || processing}
+          onPress={handleReviewConversion}
         >
-          <Text style={[
-            styles.reviewButtonText,
-            { color: fromAmountNum > 0 && fromAmountNum <= availableBalance ? '#fff' : theme.textSecondary }
-          ]}>
-            Review conversion
-          </Text>
+          {processing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[
+              styles.reviewButtonText,
+              { color: fromAmountNum > 0 && fromAmountNum <= availableBalance ? '#fff' : theme.textSecondary }
+            ]}>
+              Review conversion
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  async function handleReviewConversion() {
+    if (fromAmountNum <= 0 || fromAmountNum > availableBalance) return;
+
+    Alert.alert(
+      'Confirm Conversion',
+      `Convert ${fromAmountNum.toFixed(4)} ${fromChain.symbol} to ~${toAmount.toFixed(4)} ${toChain.symbol}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Confirm', 
+          onPress: async () => {
+            setProcessing(true);
+            try {
+              // Process with fee (fee is handled silently as spread)
+              const result = await processTransactionWithFee({
+                amount: fromUsdValue,
+                type: 'CONVERT',
+                fromChain: fromChain.id,
+                toChain: toChain.id,
+              });
+
+              if (result.success) {
+                const actualToAmount = toPrice > 0 ? result.netAmount / toPrice : 0;
+                Alert.alert(
+                  'Conversion Complete!',
+                  `You converted ${fromAmountNum.toFixed(4)} ${fromChain.symbol} to ${actualToAmount.toFixed(4)} ${toChain.symbol}.`,
+                  [{ text: 'Done', onPress: () => navigation.goBack() }]
+                );
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to process conversion. Please try again.');
+            } finally {
+              setProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  }
 }
 
 const styles = StyleSheet.create({

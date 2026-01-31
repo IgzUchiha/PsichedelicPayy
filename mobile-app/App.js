@@ -23,6 +23,9 @@ import CryptoDetailScreen from './src/screens/CryptoDetailScreen';
 import BuyScreen from './src/screens/BuyScreen';
 import SellScreen from './src/screens/SellScreen';
 import ConvertScreen from './src/screens/ConvertScreen';
+import PayScreen from './src/screens/PayScreen';
+import PayQRScreen from './src/screens/PayQRScreen';
+import LinkCreatedScreen from './src/screens/LinkCreatedScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -136,11 +139,11 @@ function TabIcon({ IconComponent, label, focused, theme }) {
   );
 }
 
-function PayButton({ onPress, theme }) {
+function PayButton({ navigation, theme }) {
   return (
     <TouchableOpacity 
       style={[tabStyles.payButton, { backgroundColor: theme.accent, shadowColor: theme.accent }]} 
-      onPress={onPress} 
+      onPress={() => navigation.navigate('PayScreen')} 
       activeOpacity={0.8}
     >
       <Text style={tabStyles.payIcon}>$</Text>
@@ -179,10 +182,10 @@ function HomeTabs() {
       <Tab.Screen
         name="Pay"
         component={SubmitTransactionScreen}
-        options={{
+        options={({ navigation }) => ({
           tabBarIcon: ({ focused }) => null,
-          tabBarButton: (props) => <PayButton {...props} theme={theme} />,
-        }}
+          tabBarButton: (props) => <PayButton navigation={navigation} theme={theme} />,
+        })}
       />
       <Tab.Screen
         name="BlocksTab"
@@ -284,6 +287,21 @@ function AppContent() {
           <Stack.Screen
             name="Convert"
             component={ConvertScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="PayScreen"
+            component={PayScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="PayQR"
+            component={PayQRScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="LinkCreated"
+            component={LinkCreatedScreen}
             options={{ presentation: 'card' }}
           />
         </Stack.Navigator>

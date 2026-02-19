@@ -11,6 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
+import { payyApi } from '../api/payyApi';
+import { formatExpiration, generateShareMessage } from '../config/paymentLinks';
 import Svg, { Rect, Path } from 'react-native-svg';
 
 // QR Icon
@@ -42,10 +44,14 @@ function LinkIcon({ size = 20, color = '#fff' }) {
 }
 
 export default function LinkCreatedScreen({ route, navigation }) {
-  const { amount, netAmount, link, paymentId, note } = route.params || {};
+  const { amount, netAmount, link, payLink, paymentId, note, expiresAt, status } = route.params || {};
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { updateActivityStatus } = useWallet();
+  const { updateActivityStatus, addToCashBalance } = useWallet();
+
+  // Use payLink or link (for backwards compatibility)
+  const paymentLink = payLink || link;
+  const displayAmount = netAmount || amount;
 
   const createdDate = new Date();
   const formattedDate = createdDate.toLocaleDateString('en-US', { 
@@ -61,11 +67,24 @@ export default function LinkCreatedScreen({ route, navigation }) {
     hour12: true,
   });
 
+  // Calculate expiration display
+  const expirationText = expiresAt ? formatExpiration(expiresAt) : null;
+  const isExpired = expiresAt ? Date.now() > expiresAt : false;
+
   const handleShareLink = async () => {
     try {
+      const shareData = {
+        paymentId,
+        amount: Math.round(displayAmount * 100),
+        note,
+        expiresAt,
+        url: paymentLink,
+      };
+      const message = generateShareMessage(shareData);
+      
       await Share.share({
-        message: `I'm sending you $${netAmount?.toFixed(2) || amount?.toFixed(2)} via PSI 🔐\n\nClaim your payment here:\n${link}\n\nNew to PSI? Download the app to claim!`,
-        url: link,
+        message,
+        url: paymentLink,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -74,9 +93,11 @@ export default function LinkCreatedScreen({ route, navigation }) {
 
   const handleShowQR = () => {
     navigation.navigate('PayQR', {
-      amount: netAmount?.toFixed(2) || amount?.toFixed(2),
+      amount: displayAmount?.toFixed(2),
       note,
-      payLink: link,
+      payLink: paymentLink,
+      paymentId,
+      expiresAt,
     });
   };
 
@@ -90,8 +111,26 @@ export default function LinkCreatedScreen({ route, navigation }) {
           text: 'Yes, Cancel', 
           style: 'destructive',
           onPress: async () => {
-            // In production, this would refund the amount
-            Alert.alert('Cancelled', 'Payment link has been cancelled.');
+            try {
+              // Try to cancel on backend
+              await payyApi.cancelPaymentLink(paymentId, {
+                signature: 'user_cancel',
+              });
+            } catch (error) {
+              console.log('Backend cancel not available');
+            }
+            
+            // Refund to cash balance
+            if (displayAmount > 0) {
+              await addToCashBalance(displayAmount);
+            }
+            
+            // Update activity status
+            if (paymentId) {
+              await updateActivityStatus(paymentId, 'cancelled');
+            }
+            
+            Alert.alert('Cancelled', 'Payment link has been cancelled and funds returned.');
             navigation.goBack();
           }
         }
@@ -124,12 +163,30 @@ export default function LinkCreatedScreen({ route, navigation }) {
         </View>
         <View style={styles.detailRow}>
           <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Status</Text>
-          <Text style={[styles.detailValue, { color: theme.accent }]}>Link ready</Text>
+          <Text style={[styles.detailValue, { color: isExpired ? '#EF4444' : theme.accent }]}>
+            {isExpired ? 'Expired' : (status === 'claimed' ? 'Claimed' : 'Link ready')}
+          </Text>
         </View>
         <View style={styles.detailRow}>
           <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Amount</Text>
-          <Text style={[styles.detailValue, { color: theme.textPrimary }]}>-${amount?.toFixed(2)}</Text>
+          <Text style={[styles.detailValue, { color: theme.textPrimary }]}>-${displayAmount?.toFixed(2)}</Text>
         </View>
+        {expirationText && (
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Expires</Text>
+            <Text style={[styles.detailValue, { color: isExpired ? '#EF4444' : theme.textSecondary }]}>
+              {expirationText}
+            </Text>
+          </View>
+        )}
+        {paymentId && (
+          <View style={styles.detailRow}>
+            <Text style={[styles.detailLabel, { color: theme.textSecondary }]}>Link ID</Text>
+            <Text style={[styles.detailValue, { color: theme.textSecondary, fontFamily: 'monospace' }]}>
+              {paymentId.substring(0, 12)}...
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Cancel Section */}

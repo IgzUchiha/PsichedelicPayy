@@ -8,10 +8,13 @@ import {
   TextInput,
   Share,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../context/WalletContext';
+import { createPaymentLink, generateShareMessage, formatExpiration } from '../config/paymentLinks';
+import { payyApi } from '../api/payyApi';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 // Brand purple color (matches splash)
@@ -50,11 +53,12 @@ function LinkIcon({ size = 24, color = '#000' }) {
 export default function PayScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { theme, isDarkMode } = useTheme();
-  const { wallet } = useWallet();
+  const { wallet, addActivity } = useWallet();
   
   const [amount, setAmount] = useState('0');
   const [note, setNote] = useState('');
   const [showNoteInput, setShowNoteInput] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const handleNumberPress = (num) => {
     if (num === '.' && amount.includes('.')) return;
@@ -80,14 +84,45 @@ export default function PayScreen({ navigation }) {
     return num.toFixed(2);
   };
 
-  const generatePayLink = () => {
-    // Generate a unique ZK payment link with invite/onboarding
-    const paymentId = Math.random().toString(36).substring(2, 15);
-    const amountCents = Math.round(parseFloat(amount) * 100);
-    const noteEncoded = note ? encodeURIComponent(note) : '';
-    // Include invite code for new user onboarding
-    const inviteCode = wallet?.address?.slice(-8) || 'PSI';
-    return `https://pay.psi.money/${paymentId}?amount=${amountCents}&invite=${inviteCode}${noteEncoded ? `&note=${noteEncoded}` : ''}`;
+  /**
+   * Create a production-ready payment link with cryptographic signature
+   */
+  const createSecurePaymentLink = async () => {
+    const amountNum = parseFloat(amount);
+    
+    // Create payment link with proper signature and expiration
+    const paymentData = await createPaymentLink({
+      amount: amountNum,
+      currency: 'USD',
+      recipientAddress: wallet?.address,
+      recipientName: wallet?.name || 'PSI User',
+      note: note || undefined,
+      expiresInMs: 24 * 60 * 60 * 1000, // 24 hours
+      privateKey: wallet?.privateKey, // For signature
+    });
+    
+    // Try to register with backend (optional - works offline too)
+    try {
+      await payyApi.createPaymentLink(paymentData);
+    } catch (error) {
+      console.log('Backend not available, payment link created locally');
+    }
+    
+    // Record activity
+    await addActivity({
+      type: 'payment_link',
+      subType: 'created',
+      amount: amountNum,
+      currency: 'USD',
+      note: note,
+      paymentId: paymentData.paymentId,
+      payLink: paymentData.url,
+      expiresAt: paymentData.expiresAt,
+      timestamp: Date.now(),
+      status: 'pending',
+    });
+    
+    return paymentData;
   };
 
   const handleShareViaLink = async () => {
@@ -96,30 +131,64 @@ export default function PayScreen({ navigation }) {
       return;
     }
 
-    const payLink = generatePayLink();
-    
     try {
+      setCreating(true);
+      
+      // Create secure payment link
+      const paymentData = await createSecurePaymentLink();
+      
+      // Generate share message
+      const shareMessage = generateShareMessage(paymentData);
+      
       await Share.share({
-        message: `Pay me $${formatAmount(amount)} via PSI 🔐\n\nPrivate • Instant • Zero-Knowledge\n\n${payLink}\n\nNew to PSI? Download the app and get started with private payments!`,
-        url: payLink,
+        message: shareMessage,
+        url: paymentData.url,
       });
+      
+      // Navigate to link created screen
+      navigation.navigate('LinkCreated', {
+        paymentId: paymentData.paymentId,
+        amount: paymentData.amount / 100, // Convert cents to dollars
+        note: paymentData.note,
+        payLink: paymentData.url,
+        expiresAt: paymentData.expiresAt,
+        status: 'pending',
+      });
+      
     } catch (error) {
-      console.error('Error sharing:', error);
+      console.error('Error creating payment link:', error);
+      Alert.alert('Error', 'Failed to create payment link. Please try again.');
+    } finally {
+      setCreating(false);
     }
   };
 
-  const handleShowQR = () => {
+  const handleShowQR = async () => {
     if (parseFloat(amount) <= 0) {
       Alert.alert('Invalid Amount', 'Please enter an amount to request.');
       return;
     }
     
-    const payLink = generatePayLink();
-    navigation.navigate('PayQR', { 
-      amount: formatAmount(amount), 
-      note,
-      payLink 
-    });
+    try {
+      setCreating(true);
+      
+      // Create secure payment link
+      const paymentData = await createSecurePaymentLink();
+      
+      navigation.navigate('PayQR', { 
+        amount: formatAmount(amount), 
+        note,
+        payLink: paymentData.url,
+        paymentId: paymentData.paymentId,
+        expiresAt: paymentData.expiresAt,
+      });
+      
+    } catch (error) {
+      console.error('Error creating payment link:', error);
+      Alert.alert('Error', 'Failed to create payment link. Please try again.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleDone = () => {
@@ -194,16 +263,36 @@ export default function PayScreen({ navigation }) {
 
         {/* Bottom Actions */}
         <View style={styles.bottomActions}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShowQR}>
-            <Text style={styles.actionButtonText}>VIA QR</Text>
-            <QRIcon size={20} color="#fff" />
+          <TouchableOpacity 
+            style={[styles.actionButton, creating && styles.actionButtonDisabled]} 
+            onPress={handleShowQR}
+            disabled={creating}
+          >
+            {creating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.actionButtonText}>VIA QR</Text>
+                <QRIcon size={20} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
           
           <View style={styles.actionDivider} />
           
-          <TouchableOpacity style={styles.actionButton} onPress={handleShareViaLink}>
-            <Text style={styles.actionButtonText}>VIA LINK</Text>
-            <LinkIcon size={20} color="#fff" />
+          <TouchableOpacity 
+            style={[styles.actionButton, creating && styles.actionButtonDisabled]} 
+            onPress={handleShareViaLink}
+            disabled={creating}
+          >
+            {creating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Text style={styles.actionButtonText}>VIA LINK</Text>
+                <LinkIcon size={20} color="#fff" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -333,6 +422,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
     gap: 10,
+  },
+  actionButtonDisabled: {
+    opacity: 0.6,
   },
   actionButtonText: {
     fontSize: 16,

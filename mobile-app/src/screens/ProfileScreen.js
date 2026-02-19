@@ -11,24 +11,37 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { useWallet } from '../context/WalletContext';
+import Svg, { Path, Rect, Circle as SvgCircle } from 'react-native-svg';
 
-function SettingsItem({ icon, title, subtitle, onPress, danger = false }) {
+const BRAND_PURPLE = '#6F34D5';
+
+// Menu item with icon, title, optional subtitle, and optional right-side badge
+function MenuItem({ icon, title, subtitle, rightText, rightColor, onPress, danger = false }) {
   return (
-    <TouchableOpacity style={styles.settingsItem} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.settingsIcon}>{icon}</Text>
-      <View style={styles.settingsContent}>
-        <Text style={[styles.settingsTitle, danger && styles.dangerText]}>{title}</Text>
-        {subtitle && <Text style={styles.settingsSubtitle}>{subtitle}</Text>}
+    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.6}>
+      <Text style={styles.menuIcon}>{icon}</Text>
+      <View style={styles.menuContent}>
+        <Text style={[styles.menuTitle, danger && { color: '#EF4444' }]}>{title}</Text>
+        {subtitle && <Text style={styles.menuSubtitle}>{subtitle}</Text>}
       </View>
-      <Text style={styles.chevron}>›</Text>
+      {rightText ? (
+        <Text style={[styles.menuRightText, rightColor && { color: rightColor }]}>{rightText}</Text>
+      ) : (
+        <Text style={styles.menuChevron}>›</Text>
+      )}
     </TouchableOpacity>
   );
+}
+
+// Section header
+function SectionHeader({ title }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { wallet, balance, hasWallet, removeWallet, loading } = useWallet();
+  const { wallet, balance, cashBalance = 0, hasWallet, removeWallet } = useWallet();
 
   const handleSignOut = () => {
     Alert.alert(
@@ -61,50 +74,77 @@ export default function ProfileScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+          <Text style={styles.closeText}>✕</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={() => Alert.alert('Help', 'Contact support@psichedeliclabs.com')}>
+          <View style={styles.helpButton}>
+            <Text style={styles.helpText}>?</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Wallet Card */}
-        {hasWallet ? (
-          <View style={styles.walletCard}>
-            <View style={styles.walletIcon}>
-              <Text style={styles.walletIconText}>💳</Text>
-            </View>
-            <View style={styles.walletInfo}>
-              <Text style={styles.walletName}>{wallet?.name || 'My Wallet'}</Text>
-              <Text style={styles.walletAddress}>{shortAddress}</Text>
-            </View>
-            <View style={styles.walletBalance}>
-              <Text style={styles.balanceLabel}>Balance</Text>
-              <Text style={styles.balanceValue}>${balance?.total || '0.00'}</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.noWalletCard}>
-            <Text style={styles.noWalletIcon}>🔐</Text>
-            <Text style={styles.noWalletTitle}>No Wallet Connected</Text>
-            <Text style={styles.noWalletText}>
-              Import your existing wallet to see your real balance and make transactions.
-            </Text>
-            <TouchableOpacity
-              style={styles.importButton}
-              onPress={() => navigation.navigate('ImportWallet')}
-            >
-              <Text style={styles.importButtonText}>Import Wallet</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Main Menu Items */}
+        <View style={styles.menuGroup}>
+          <MenuItem
+            icon="💵"
+            title="Cash"
+            rightText={`$${cashBalance.toFixed(2)}`}
+            rightColor="#888"
+            onPress={() => navigation.navigate('CashDetail')}
+          />
+          <MenuItem
+            icon="💳"
+            title="PSI Card"
+            rightText="Virtual"
+            rightColor={BRAND_PURPLE}
+            onPress={() => navigation.navigate('CardScreen')}
+          />
+          <MenuItem
+            icon="🎁"
+            title="Rewards"
+            onPress={() => Alert.alert('Rewards', 'Earn rewards on every transaction you make with PSI.')}
+          />
+          <MenuItem
+            icon="👥"
+            title="Invite friends"
+            rightText="Earn $10"
+            rightColor="#22C55E"
+            onPress={() => Alert.alert('Invite Friends', 'Share your referral link to earn $10 per friend.')}
+          />
+        </View>
+
+        {/* Transact Section */}
+        <SectionHeader title="TRANSACT" />
+        <View style={styles.menuGroup}>
+          <MenuItem
+            icon="💳"
+            title="Debit card"
+            onPress={() => navigation.navigate('CardScreen')}
+          />
+          <MenuItem
+            icon="📲"
+            title="Request payment"
+            onPress={() => navigation.navigate('PayScreen')}
+          />
+          <MenuItem
+            icon="🔄"
+            title="Convert"
+            onPress={() => navigation.navigate('Convert', {})}
+          />
+        </View>
 
         {/* Wallet Section */}
-        <Text style={styles.sectionTitle}>Wallet</Text>
-        <View style={styles.settingsGroup}>
-          {hasWallet ? (
-            <>
-              <SettingsItem
+        {hasWallet && (
+          <>
+            <SectionHeader title="WALLET" />
+            <View style={styles.menuGroup}>
+              <MenuItem
                 icon="🔑"
                 title="Backup Seed Phrase"
-                subtitle="View your recovery phrase"
+                subtitle={shortAddress}
                 onPress={() => {
                   if (wallet?.mnemonic) {
                     Alert.alert(
@@ -121,84 +161,71 @@ export default function ProfileScreen() {
                   }
                 }}
               />
-              <SettingsItem
+              <MenuItem
                 icon="📋"
                 title="Copy Address"
                 subtitle={shortAddress}
                 onPress={() => Alert.alert('Copied!', 'Address copied to clipboard')}
               />
-            </>
-          ) : (
-            <SettingsItem
-              icon="📥"
-              title="Import Wallet"
-              subtitle="Restore from private key"
-              onPress={() => navigation.navigate('ImportWallet')}
-            />
-          )}
-        </View>
-
-        {/* Settings Section */}
-        <Text style={styles.sectionTitle}>Settings</Text>
-        <View style={styles.settingsGroup}>
-          <SettingsItem
-            icon="🔔"
-            title="Notifications"
-            subtitle="Manage push notifications"
-            onPress={() => {}}
-          />
-          <SettingsItem
-            icon="🌙"
-            title="Appearance"
-            subtitle="Dark mode"
-            onPress={() => {}}
-          />
-          <SettingsItem
-            icon="🔒"
-            title="Security"
-            subtitle="Face ID, PIN code"
-            onPress={() => {}}
-          />
-        </View>
-
-        {/* About Section */}
-        <Text style={styles.sectionTitle}>About</Text>
-        <View style={styles.settingsGroup}>
-          <SettingsItem
-            icon="📖"
-            title="Help Center"
-            onPress={() => {}}
-          />
-          <SettingsItem
-            icon="📜"
-            title="Terms of Service"
-            onPress={() => {}}
-          />
-          <SettingsItem
-            icon="🛡️"
-            title="Privacy Policy"
-            onPress={() => {}}
-          />
-        </View>
-
-        {/* Sign Out Section */}
-        {hasWallet && (
-          <>
-            <Text style={styles.sectionTitle}>Account</Text>
-            <View style={styles.settingsGroup}>
-              <SettingsItem
-                icon="🚪"
-                title="Sign Out"
-                subtitle="Remove wallet from this device"
-                onPress={handleSignOut}
-                danger
-              />
             </View>
           </>
         )}
 
+        {/* More Section */}
+        <SectionHeader title="MORE" />
+        <View style={styles.menuGroup}>
+          <MenuItem
+            icon="🔔"
+            title="Notifications"
+            onPress={() => {}}
+          />
+          <MenuItem
+            icon="🌙"
+            title="Appearance"
+            onPress={() => {}}
+          />
+          <MenuItem
+            icon="🔒"
+            title="Security"
+            onPress={() => {}}
+          />
+          <MenuItem
+            icon="📖"
+            title="Help Center"
+            onPress={() => Alert.alert('Support', 'Contact support@psichedeliclabs.com for help.')}
+          />
+          <MenuItem
+            icon="📜"
+            title="Terms of Service"
+            onPress={() => {}}
+          />
+        </View>
+
+        {/* Sign Out */}
+        {hasWallet && (
+          <View style={[styles.menuGroup, { marginTop: 16 }]}>
+            <MenuItem
+              icon="🚪"
+              title="Sign Out"
+              onPress={handleSignOut}
+              danger
+            />
+          </View>
+        )}
+
+        {/* Get Help Card */}
+        <View style={styles.helpCard}>
+          <View style={styles.helpCardContent}>
+            <Text style={styles.helpCardTitle}>Get help</Text>
+            <Text style={styles.helpCardSubtitle}>Find answers to common{'\n'}questions or talk to us</Text>
+          </View>
+          <View style={styles.helpCardIcon}>
+            <Text style={{ fontSize: 32 }}>💬</Text>
+          </View>
+        </View>
+
         {/* Version */}
-        <Text style={styles.version}>Payy v1.0.0</Text>
+        <Text style={styles.version}>PSI v1.0.0</Text>
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -206,158 +233,127 @@ export default function ProfileScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
-  headerTitle: {
-    fontSize: 34,
-    fontWeight: '700',
+  closeButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeText: {
+    fontSize: 22,
     color: colors.textPrimary,
+    fontWeight: '300',
+  },
+  helpButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#1C6EF2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  helpText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
   scrollView: {
     flex: 1,
   },
-  walletCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.cardBackground,
+  menuGroup: {
     marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
-  },
-  walletIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  walletIconText: {
-    fontSize: 24,
-  },
-  walletInfo: {
-    flex: 1,
-  },
-  walletName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  walletAddress: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontFamily: 'monospace',
-  },
-  walletBalance: {
-    alignItems: 'flex-end',
-  },
-  balanceLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  balanceValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.green,
-  },
-  noWalletCard: {
-    backgroundColor: colors.cardBackground,
-    marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  noWalletIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  noWalletTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary,
     marginBottom: 8,
   },
-  noWalletText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  importButton: {
-    backgroundColor: colors.green,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 20,
-  },
-  importButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.background,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    paddingHorizontal: 20,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  settingsGroup: {
-    backgroundColor: colors.cardBackground,
-    marginHorizontal: 20,
-    borderRadius: 16,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  settingsItem: {
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
+    borderBottomColor: colors.divider || '#1C1C1E',
   },
-  settingsIcon: {
-    fontSize: 20,
-    marginRight: 12,
+  menuIcon: {
+    fontSize: 22,
+    marginRight: 14,
+    width: 30,
+    textAlign: 'center',
   },
-  settingsContent: {
+  menuContent: {
     flex: 1,
   },
-  settingsTitle: {
-    fontSize: 16,
+  menuTitle: {
+    fontSize: 17,
     color: colors.textPrimary,
+    fontWeight: '400',
   },
-  settingsSubtitle: {
+  menuSubtitle: {
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  dangerText: {
-    color: colors.red,
+  menuRightText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
-  chevron: {
-    fontSize: 20,
-    color: colors.textMuted,
+  menuChevron: {
+    fontSize: 22,
+    color: colors.textMuted || '#555',
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    paddingHorizontal: 20,
+    marginBottom: 4,
+    marginTop: 16,
+    letterSpacing: 0.5,
+  },
+  helpCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.cardBackground || '#1C1C1E',
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 20,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  helpCardContent: {
+    flex: 1,
+  },
+  helpCardTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  helpCardSubtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  helpCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2C2C2E',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   version: {
     fontSize: 13,
-    color: colors.textMuted,
+    color: colors.textMuted || '#555',
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 24,
   },
 });

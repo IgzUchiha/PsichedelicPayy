@@ -1,13 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import * as Linking from 'expo-linking';
 
 import { WalletProvider, useWallet } from './src/context/WalletContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { linkingConfig, subscribeToPaymentLinks, getInitialPaymentLink } from './src/config/linking';
 import HomeScreen from './src/screens/HomeScreen';
 import BlocksScreen from './src/screens/BlocksScreen';
 import TransactionsScreen from './src/screens/TransactionsScreen';
@@ -26,6 +28,8 @@ import ConvertScreen from './src/screens/ConvertScreen';
 import PayScreen from './src/screens/PayScreen';
 import PayQRScreen from './src/screens/PayQRScreen';
 import LinkCreatedScreen from './src/screens/LinkCreatedScreen';
+import ClaimPaymentScreen from './src/screens/ClaimPaymentScreen';
+import CardScreen from './src/screens/CardScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -233,7 +237,15 @@ function AppContent() {
   return (
     <>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer 
+        theme={navigationTheme}
+        linking={linkingConfig}
+        fallback={
+          <View style={[tabStyles.loadingContainer, { backgroundColor: theme.background }]}>
+            <ActivityIndicator size="large" color={theme.accent} />
+          </View>
+        }
+      >
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
@@ -248,6 +260,7 @@ function AppContent() {
             options={{ gestureEnabled: false }}
           />
           <Stack.Screen name="ImportWallet" component={ImportWalletScreen} />
+          <Stack.Screen name="HomeTabs" component={HomeTabs} />
           <Stack.Screen name="Main" component={HomeTabs} />
           <Stack.Screen
             name="SubmitTransaction"
@@ -302,6 +315,21 @@ function AppContent() {
           <Stack.Screen
             name="LinkCreated"
             component={LinkCreatedScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="CardScreen"
+            component={CardScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="ClaimPayment"
+            component={ClaimPaymentScreen}
+            options={{ presentation: 'card' }}
+          />
+          <Stack.Screen
+            name="ClaimPaymentAlt"
+            component={ClaimPaymentScreen}
             options={{ presentation: 'card' }}
           />
         </Stack.Navigator>

@@ -53,6 +53,7 @@ tracing-stackdriver = { workspace = true }
 tracing-subscriber = { workspace = true }
 web3 = { workspace = true }
 itertools = { workspace = true }
+lazy_static = { workspace = true }
 borsh = { workspace = true }
 wire-message = { workspace = true }
 derivative = { workspace = true }

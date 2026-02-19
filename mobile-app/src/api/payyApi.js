@@ -253,6 +253,162 @@ export const payyApi = {
       throw error;
     }
   },
+
+  // === Payment Links API ===
+
+  /**
+   * Create a new payment link (stored server-side for validation)
+   * @param {Object} paymentData - Payment link data
+   * @returns {Object} Created payment link with server-assigned ID
+   */
+  createPaymentLink: async (paymentData) => {
+    try {
+      const response = await api.post('/v0/payment-links', {
+        payment_id: paymentData.paymentId,
+        amount_cents: paymentData.amount,
+        currency: paymentData.currency,
+        recipient: paymentData.recipient,
+        recipient_name: paymentData.recipientName,
+        note: paymentData.note,
+        expires_at: paymentData.expiresAt,
+        signature: paymentData.signature,
+        version: paymentData.version || 1,
+      });
+      updateBackendStatus(true);
+      return response.data;
+    } catch (error) {
+      updateBackendStatus(false);
+      console.error('Error creating payment link:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get payment link details by ID
+   * @param {string} paymentId - The payment link ID
+   * @returns {Object} Payment link data
+   */
+  getPaymentLink: async (paymentId) => {
+    try {
+      const response = await api.get(`/v0/payment-links/${paymentId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching payment link:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Validate a payment link (check signature, expiration, status)
+   * @param {string} paymentId - The payment link ID
+   * @param {Object} params - URL parameters for signature verification
+   * @returns {Object} Validation result
+   */
+  validatePaymentLink: async (paymentId, params) => {
+    try {
+      const response = await api.post(`/v0/payment-links/${paymentId}/validate`, {
+        amount_cents: params.amount,
+        currency: params.currency,
+        recipient: params.recipient,
+        expires_at: params.expiresAt,
+        signature: params.signature,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error validating payment link:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Claim a payment link (initiate ZK transfer to claimer)
+   * @param {string} paymentId - The payment link ID
+   * @param {Object} claimData - Claimer's wallet info and proof
+   * @returns {Object} Claim result with transaction info
+   */
+  claimPaymentLink: async (paymentId, claimData) => {
+    try {
+      const response = await api.post(`/v0/payment-links/${paymentId}/claim`, {
+        claimer_address: claimData.claimerAddress,
+        claimer_public_key: claimData.claimerPublicKey,
+        proof: claimData.proof, // ZK proof of authorization
+      }, {
+        timeout: 120000, // 2 min for ZK proof verification
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error claiming payment link:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Cancel a payment link (only by creator)
+   * @param {string} paymentId - The payment link ID
+   * @param {Object} cancelData - Creator signature for authorization
+   * @returns {Object} Cancellation result
+   */
+  cancelPaymentLink: async (paymentId, cancelData) => {
+    try {
+      const response = await api.post(`/v0/payment-links/${paymentId}/cancel`, {
+        signature: cancelData.signature,
+        recipient: cancelData.recipient,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error cancelling payment link:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * List payment links for a user
+   * @param {string} address - User's wallet address
+   * @param {Object} options - Filter options
+   * @returns {Array} List of payment links
+   */
+  listPaymentLinks: async (address, options = {}) => {
+    if (shouldSkipCall()) return [];
+    try {
+      const response = await api.get('/v0/payment-links', {
+        params: {
+          address,
+          status: options.status, // 'pending', 'claimed', 'expired', 'cancelled'
+          type: options.type, // 'sent', 'received'
+          limit: options.limit || 50,
+          offset: options.offset || 0,
+        },
+      });
+      updateBackendStatus(true);
+      return response.data;
+    } catch (error) {
+      updateBackendStatus(false);
+      console.error('Error listing payment links:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get ZK proof for claiming a payment link
+   * @param {string} paymentId - The payment link ID
+   * @param {Object} claimRequest - Claim request details
+   * @returns {Object} Generated ZK proof
+   */
+  generateClaimProof: async (paymentId, claimRequest) => {
+    try {
+      const response = await api.post(`/v0/payment-links/${paymentId}/generate-proof`, {
+        claimer_address: claimRequest.claimerAddress,
+        claimer_secret_key: claimRequest.claimerSecretKey,
+        amount_cents: claimRequest.amountCents,
+      }, {
+        timeout: 180000, // 3 min for proof generation
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error generating claim proof:', error);
+      throw error;
+    }
+  },
 };
 
 export default payyApi;

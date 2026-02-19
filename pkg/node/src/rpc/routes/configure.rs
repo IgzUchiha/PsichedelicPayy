@@ -1,4 +1,4 @@
-use super::{blocks, element, health, height, merkle, prove, stats, txn, State};
+use super::{blocks, element, health, height, merkle, payment_links, prove, stats, txn, State};
 use actix_web::web;
 
 pub fn configure_routes(state: State) -> Box<dyn FnOnce(&mut web::ServiceConfig)> {
@@ -25,6 +25,32 @@ pub fn configure_routes(state: State) -> Box<dyn FnOnce(&mut web::ServiceConfig)
             .service(web::resource("/prove/generate-psi").get(prove::generate_psi))
             .service(web::resource("/prove/commitment").post(prove::calculate_commitment))
             .service(web::resource("/prove/faucet").post(prove::faucet))
-            .service(web::resource("/prove/merkle-paths").post(prove::get_merkle_paths_for_notes));
+            .service(web::resource("/prove/merkle-paths").post(prove::get_merkle_paths_for_notes))
+            // Payment Links API
+            .service(
+                web::resource("/payment-links")
+                    .get(payment_links::list_payment_links)
+                    .post(payment_links::create_payment_link),
+            )
+            .service(
+                web::resource("/payment-links/{payment_id}")
+                    .get(payment_links::get_payment_link),
+            )
+            .service(
+                web::resource("/payment-links/{payment_id}/validate")
+                    .post(payment_links::validate_payment_link),
+            )
+            .service(
+                web::resource("/payment-links/{payment_id}/claim")
+                    .post(payment_links::claim_payment_link),
+            )
+            .service(
+                web::resource("/payment-links/{payment_id}/cancel")
+                    .post(payment_links::cancel_payment_link),
+            )
+            .service(
+                web::resource("/payment-links/{payment_id}/generate-proof")
+                    .post(payment_links::generate_claim_proof),
+            );
     })
 }

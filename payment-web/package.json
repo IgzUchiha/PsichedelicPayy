@@ -1,0 +1,16 @@
+{
+  "name": "psi-payment-web",
+  "version": "1.0.0",
+  "description": "PSI Payment Links Web Service - Landing page and Universal Links support",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

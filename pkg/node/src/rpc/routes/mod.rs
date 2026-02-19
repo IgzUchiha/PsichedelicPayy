@@ -5,6 +5,7 @@ pub mod error;
 pub mod health;
 pub mod height;
 pub mod merkle;
+pub mod payment_links;
 pub mod prove;
 pub mod state;
 pub mod stats;
